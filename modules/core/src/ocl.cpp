@@ -4599,10 +4599,10 @@ struct Image2D::Impl
         else
 #endif
         {
-            CV_SUPPRESS_DEPRECATED_START
+//            CV_SUPPRESS_DEPRECATED_START
             CV_Assert(!alias);  // This is an OpenCL 1.2 extension
             handle = clCreateImage2D(context, CL_MEM_READ_WRITE, &format, src.cols, src.rows, 0, NULL, &err);
-            CV_SUPPRESS_DEPRECATED_END
+//            CV_SUPPRESS_DEPRECATED_END
         }
         CV_OclDbgAssert(err == CL_SUCCESS);
 
