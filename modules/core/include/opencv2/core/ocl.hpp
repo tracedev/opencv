@@ -46,12 +46,17 @@
 
 namespace cv { namespace ocl {
 
+//! @addtogroup core_opencl
+//! @{
+
 CV_EXPORTS_W bool haveOpenCL();
 CV_EXPORTS_W bool useOpenCL();
 CV_EXPORTS_W bool haveAmdBlas();
 CV_EXPORTS_W bool haveAmdFft();
 CV_EXPORTS_W void setUseOpenCL(bool flag);
 CV_EXPORTS_W void finish();
+
+CV_EXPORTS bool haveSVM();
 
 class CV_EXPORTS Context;
 class CV_EXPORTS Device;
@@ -179,6 +184,7 @@ public:
     // After fix restore code in arithm.cpp: ocl_compare()
     inline bool isAMD() const { return vendorID() == VENDOR_AMD; }
     inline bool isIntel() const { return vendorID() == VENDOR_INTEL; }
+    inline bool isNVidia() const { return vendorID() == VENDOR_NVIDIA; }
 
     int maxClockFrequency() const;
     int maxComputeUnits() const;
@@ -245,7 +251,10 @@ public:
     void* ptr() const;
 
     friend void initializeContextFromHandle(Context& ctx, void* platform, void* context, void* device);
-protected:
+
+    bool useSVM() const;
+    void setUseSVM(bool enabled);
+
     struct Impl;
     Impl* p;
 };
@@ -596,11 +605,38 @@ protected:
 CV_EXPORTS const char* convertTypeStr(int sdepth, int ddepth, int cn, char* buf);
 CV_EXPORTS const char* typeToStr(int t);
 CV_EXPORTS const char* memopTypeToStr(int t);
+CV_EXPORTS const char* vecopTypeToStr(int t);
 CV_EXPORTS String kernelToStr(InputArray _kernel, int ddepth = -1, const char * name = NULL);
 CV_EXPORTS void getPlatfomsInfo(std::vector<PlatformInfo>& platform_info);
+
+
+enum OclVectorStrategy
+{
+    // all matrices have its own vector width
+    OCL_VECTOR_OWN = 0,
+    // all matrices have maximal vector width among all matrices
+    // (useful for cases when matrices have different data types)
+    OCL_VECTOR_MAX = 1,
+
+    // default strategy
+    OCL_VECTOR_DEFAULT = OCL_VECTOR_OWN
+};
+
 CV_EXPORTS int predictOptimalVectorWidth(InputArray src1, InputArray src2 = noArray(), InputArray src3 = noArray(),
                                          InputArray src4 = noArray(), InputArray src5 = noArray(), InputArray src6 = noArray(),
-                                         InputArray src7 = noArray(), InputArray src8 = noArray(), InputArray src9 = noArray());
+                                         InputArray src7 = noArray(), InputArray src8 = noArray(), InputArray src9 = noArray(),
+                                         OclVectorStrategy strat = OCL_VECTOR_DEFAULT);
+
+CV_EXPORTS int checkOptimalVectorWidth(const int *vectorWidths,
+                                       InputArray src1, InputArray src2 = noArray(), InputArray src3 = noArray(),
+                                       InputArray src4 = noArray(), InputArray src5 = noArray(), InputArray src6 = noArray(),
+                                       InputArray src7 = noArray(), InputArray src8 = noArray(), InputArray src9 = noArray(),
+                                       OclVectorStrategy strat = OCL_VECTOR_DEFAULT);
+
+// with OCL_VECTOR_MAX strategy
+CV_EXPORTS int predictOptimalVectorWidthMax(InputArray src1, InputArray src2 = noArray(), InputArray src3 = noArray(),
+                                            InputArray src4 = noArray(), InputArray src5 = noArray(), InputArray src6 = noArray(),
+                                            InputArray src7 = noArray(), InputArray src8 = noArray(), InputArray src9 = noArray());
 
 CV_EXPORTS void buildOptionsAddMatrixDescription(String& buildOptions, const String& name, InputArray _m);
 
@@ -635,6 +671,20 @@ protected:
 
 
 CV_EXPORTS MatAllocator* getOpenCLAllocator();
+
+
+#ifdef __OPENCV_BUILD
+namespace internal {
+
+CV_EXPORTS bool isPerformanceCheckBypassed();
+#define OCL_PERFORMANCE_CHECK(condition) (cv::ocl::internal::isPerformanceCheckBypassed() || (condition))
+
+CV_EXPORTS bool isCLBuffer(UMat& u);
+
+} // namespace internal
+#endif
+
+//! @}
 
 }}
 

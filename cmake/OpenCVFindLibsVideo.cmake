@@ -32,7 +32,7 @@ if(WITH_GSTREAMER AND NOT WITH_GSTREAMER_0_10)
 endif(WITH_GSTREAMER AND NOT WITH_GSTREAMER_0_10)
 
 # if gstreamer 1.x was not found, or we specified we wanted 0.10, try to find it
-if(WITH_GSTREAMER_0_10 OR NOT HAVE_GSTREAMER)
+if(WITH_GSTREAMER AND NOT HAVE_GSTREAMER OR WITH_GSTREAMER_0_10)
   CHECK_MODULE(gstreamer-base-0.10 HAVE_GSTREAMER_BASE)
   CHECK_MODULE(gstreamer-video-0.10 HAVE_GSTREAMER_VIDEO)
   CHECK_MODULE(gstreamer-app-0.10 HAVE_GSTREAMER_APP)
@@ -47,7 +47,7 @@ if(WITH_GSTREAMER_0_10 OR NOT HAVE_GSTREAMER)
       set(GSTREAMER_RIFF_VERSION ${ALIASOF_gstreamer-riff-0.10_VERSION})
       set(GSTREAMER_PBUTILS_VERSION ${ALIASOF_gstreamer-pbutils-0.10_VERSION})
   endif()
-endif(WITH_GSTREAMER_0_10 OR NOT HAVE_GSTREAMER)
+endif(WITH_GSTREAMER AND NOT HAVE_GSTREAMER OR WITH_GSTREAMER_0_10)
 
 # --- unicap ---
 ocv_clear_vars(HAVE_UNICAP)
@@ -166,6 +166,11 @@ if(WITH_OPENNI)
   include("${OpenCV_SOURCE_DIR}/cmake/OpenCVFindOpenNI.cmake")
 endif(WITH_OPENNI)
 
+ocv_clear_vars(HAVE_OPENNI2)
+if(WITH_OPENNI2)
+  include("${OpenCV_SOURCE_DIR}/cmake/OpenCVFindOpenNI2.cmake")
+endif(WITH_OPENNI2)
+
 # --- XIMEA ---
 ocv_clear_vars(HAVE_XIMEA)
 if(WITH_XIMEA)
@@ -249,6 +254,7 @@ if(WITH_DSHOW)
 endif(WITH_DSHOW)
 
 # --- VideoInput/Microsoft Media Foundation ---
+ocv_clear_vars(HAVE_MSMF)
 if(WITH_MSMF)
   check_include_file(Mfapi.h HAVE_MSMF)
 endif(WITH_MSMF)
@@ -256,7 +262,9 @@ endif(WITH_MSMF)
 # --- Extra HighGUI and VideoIO libs on Windows ---
 if(WIN32)
   list(APPEND HIGHGUI_LIBRARIES comctl32 gdi32 ole32 setupapi ws2_32)
-  list(APPEND VIDEOIO_LIBRARIES vfw32)
+  if(HAVE_VFW)
+    list(APPEND VIDEOIO_LIBRARIES vfw32)
+  endif()
   if(MINGW64)
     list(APPEND VIDEOIO_LIBRARIES avifil32 avicap32 winmm msvfw32)
     list(REMOVE_ITEM VIDEOIO_LIBRARIES vfw32)

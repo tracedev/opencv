@@ -48,6 +48,10 @@
 extern "C" {
 #endif /* __cplusplus */
 
+/**
+  @addtogroup videoio_c
+  @{
+*/
 
 /****************************************************************************************\
 *                         Working with Video Files and Cameras                           *
@@ -104,7 +108,9 @@ enum
 
     CV_CAP_GIGANETIX = 1300,  // Smartek Giganetix GigEVisionSDK
 
-    CV_CAP_INTELPERC = 1500 // Intel Perceptual Computing SDK
+    CV_CAP_INTELPERC = 1500, // Intel Perceptual Computing
+
+    CV_CAP_OPENNI2 = 1600   // OpenNI2 (for Kinect)
 };
 
 /* start capturing frames from camera: index = camera_index + domain_offset (CV_CAP_*) */
@@ -154,7 +160,7 @@ enum
     CV_CAP_PROP_CONVERT_RGB   =16,
     CV_CAP_PROP_WHITE_BALANCE_BLUE_U =17,
     CV_CAP_PROP_RECTIFICATION =18,
-    CV_CAP_PROP_MONOCROME     =19,
+    CV_CAP_PROP_MONOCHROME    =19,
     CV_CAP_PROP_SHARPNESS     =20,
     CV_CAP_PROP_AUTO_EXPOSURE =21, // exposure control done by camera,
                                    // user can adjust refernce level
@@ -200,6 +206,8 @@ enum
     CV_CAP_PROP_OPENNI_MAX_TIME_DURATION = 108,
 
     CV_CAP_PROP_OPENNI_GENERATOR_PRESENT = 109,
+    CV_CAP_PROP_OPENNI2_SYNC = 110,
+    CV_CAP_PROP_OPENNI2_MIRROR = 111,
 
     CV_CAP_OPENNI_IMAGE_GENERATOR_PRESENT         = CV_CAP_OPENNI_IMAGE_GENERATOR + CV_CAP_PROP_OPENNI_GENERATOR_PRESENT,
     CV_CAP_OPENNI_IMAGE_GENERATOR_OUTPUT_MODE     = CV_CAP_OPENNI_IMAGE_GENERATOR + CV_CAP_PROP_OPENNI_OUTPUT_MODE,
@@ -214,6 +222,11 @@ enum
     // PVAPI
     CV_CAP_PROP_PVAPI_MULTICASTIP           = 300, // ip for anable multicast master mode. 0 for disable multicast
     CV_CAP_PROP_PVAPI_FRAMESTARTTRIGGERMODE = 301, // FrameStartTriggerMode: Determines how a frame is initiated
+    CV_CAP_PROP_PVAPI_DECIMATIONHORIZONTAL  = 302, // Horizontal sub-sampling of the image
+    CV_CAP_PROP_PVAPI_DECIMATIONVERTICAL    = 303, // Vertical sub-sampling of the image
+    CV_CAP_PROP_PVAPI_BINNINGX              = 304, // Horizontal binning factor
+    CV_CAP_PROP_PVAPI_BINNINGY              = 305, // Vertical binning factor
+    CV_CAP_PROP_PVAPI_PIXELFORMAT           = 306, // Pixel format
 
     // Properties of cameras available through XIMEA SDK interface
     CV_CAP_PROP_XI_DOWNSAMPLING  = 400,      // Change image resolution by binning or skipping.
@@ -280,6 +293,16 @@ enum
     CV_CAP_INTELPERC_GENERATORS_MASK = CV_CAP_INTELPERC_DEPTH_GENERATOR + CV_CAP_INTELPERC_IMAGE_GENERATOR
 };
 
+// Generic camera output modes.
+// Currently, these are supported through the libv4l interface only.
+enum
+{
+    CV_CAP_MODE_BGR  = 0, // BGR24 (default)
+    CV_CAP_MODE_RGB  = 1, // RGB24
+    CV_CAP_MODE_GRAY = 2, // Y8
+    CV_CAP_MODE_YUYV = 3  // YUYV
+};
+
 enum
 {
     // Data given from depth generator.
@@ -310,6 +333,7 @@ enum
     CV_CAP_ANDROID_COLOR_FRAME_BGR = 0, //BGR
     CV_CAP_ANDROID_COLOR_FRAME = CV_CAP_ANDROID_COLOR_FRAME_BGR,
     CV_CAP_ANDROID_GREY_FRAME  = 1,  //Y
+    CV_CAP_ANDROID_GRAY_FRAME  = CV_CAP_ANDROID_GREY_FRAME,
     CV_CAP_ANDROID_COLOR_FRAME_RGB = 2,
     CV_CAP_ANDROID_COLOR_FRAME_BGRA = 3,
     CV_CAP_ANDROID_COLOR_FRAME_RGBA = 4
@@ -408,6 +432,7 @@ CVAPI(void) cvReleaseVideoWriter( CvVideoWriter** writer );
 #define cvCreateAVIWriter cvCreateVideoWriter
 #define cvWriteToAVI cvWriteFrame
 
+/** @} videoio_c */
 
 #ifdef __cplusplus
 }

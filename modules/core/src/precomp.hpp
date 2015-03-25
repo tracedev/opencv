@@ -99,8 +99,6 @@ extern const float g_8x32fTab[];
 extern const ushort g_8x16uSqrTab[];
 #define CV_SQR_8U(x)  cv::g_8x16uSqrTab[(x)+255]
 
-extern const char* g_HersheyGlyphs[];
-
 extern const uchar g_Saturate8u[];
 #define CV_FAST_CAST_8U(t)   (assert(-256 <= (t) && (t) <= 512), cv::g_Saturate8u[(t)+256])
 #define CV_MIN_8U(a,b)       ((a) - CV_FAST_CAST_8U((a) - (b)))
@@ -194,6 +192,7 @@ struct NoVec
 extern volatile bool USE_SSE2;
 extern volatile bool USE_SSE4_2;
 extern volatile bool USE_AVX;
+extern volatile bool USE_AVX2;
 
 enum { BLOCK_SIZE = 1024 };
 
@@ -233,18 +232,44 @@ inline bool checkScalar(InputArray sc, int atype, int sckind, int akind)
 
 void convertAndUnrollScalar( const Mat& sc, int buftype, uchar* scbuf, size_t blocksize );
 
+#ifdef CV_COLLECT_IMPL_DATA
+struct ImplCollector
+{
+    ImplCollector()
+    {
+        useCollection   = false;
+        implFlags       = 0;
+    }
+    bool useCollection; // enable/disable impl data collection
+
+    int implFlags;
+    std::vector<int>    implCode;
+    std::vector<String> implFun;
+
+    cv::Mutex mutex;
+};
+#endif
+
 struct CoreTLSData
 {
-    CoreTLSData() : device(0), useOpenCL(-1)
-    {}
+    CoreTLSData() : device(0), useOpenCL(-1), useIPP(-1)
+    {
+#ifdef HAVE_TEGRA_OPTIMIZATION
+        useTegra = -1;
+#endif
+    }
 
     RNG rng;
     int device;
     ocl::Queue oclQueue;
     int useOpenCL; // 1 - use, 0 - do not use, -1 - auto/not initialized
+    int useIPP; // 1 - use, 0 - do not use, -1 - auto/not initialized
+#ifdef HAVE_TEGRA_OPTIMIZATION
+    int useTegra; // 1 - use, 0 - do not use, -1 - auto/not initialized
+#endif
 };
 
-extern TLSData<CoreTLSData> coreTlsData;
+TLSData<CoreTLSData>& getCoreTlsData();
 
 #if defined(BUILD_SHARED_LIBS)
 #if defined WIN32 || defined _WIN32 || defined WINCE

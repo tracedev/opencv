@@ -71,6 +71,8 @@
 #  endif
 #endif
 
+//! @cond IGNORED
+
 namespace cv
 {
 #ifdef HAVE_TBB
@@ -127,40 +129,6 @@ namespace cv
     CV_EXPORTS const char* currentParallelFramework();
 } //namespace cv
 
-#define CV_INIT_ALGORITHM(classname, algname, memberinit) \
-    static inline ::cv::Algorithm* create##classname##_hidden() \
-    { \
-        return new classname; \
-    } \
-    \
-    static inline ::cv::Ptr< ::cv::Algorithm> create##classname##_ptr_hidden() \
-    { \
-        return ::cv::makePtr<classname>(); \
-    } \
-    \
-    static inline ::cv::AlgorithmInfo& classname##_info() \
-    { \
-        static ::cv::AlgorithmInfo classname##_info_var(algname, create##classname##_hidden); \
-        return classname##_info_var; \
-    } \
-    \
-    static ::cv::AlgorithmInfo& classname##_info_auto = classname##_info(); \
-    \
-    ::cv::AlgorithmInfo* classname::info() const \
-    { \
-        static volatile bool initialized = false; \
-        \
-        if( !initialized ) \
-        { \
-            initialized = true; \
-            classname obj; \
-            memberinit; \
-        } \
-        return &classname##_info(); \
-    }
-
-
-
 /****************************************************************************************\
 *                                  Common declarations                                   *
 \****************************************************************************************/
@@ -204,6 +172,27 @@ namespace cv
 CV_EXPORTS void scalarToRawData(const cv::Scalar& s, void* buf, int type, int unroll_to = 0);
 }
 
+// property implementation macros
+
+#define CV_IMPL_PROPERTY_RO(type, name, member) \
+    inline type get##name() const { return member; }
+
+#define CV_HELP_IMPL_PROPERTY(r_type, w_type, name, member) \
+    CV_IMPL_PROPERTY_RO(r_type, name, member) \
+    inline void set##name(w_type val) { member = val; }
+
+#define CV_HELP_WRAP_PROPERTY(r_type, w_type, name, internal_name, internal_obj) \
+    r_type get##name() const { return internal_obj.get##internal_name(); } \
+    void set##name(w_type val) { internal_obj.set##internal_name(val); }
+
+#define CV_IMPL_PROPERTY(type, name, member) CV_HELP_IMPL_PROPERTY(type, type, name, member)
+#define CV_IMPL_PROPERTY_S(type, name, member) CV_HELP_IMPL_PROPERTY(type, const type &, name, member)
+
+#define CV_WRAP_PROPERTY(type, name, internal_name, internal_obj)  CV_HELP_WRAP_PROPERTY(type, type, name, internal_name, internal_obj)
+#define CV_WRAP_PROPERTY_S(type, name, internal_name, internal_obj) CV_HELP_WRAP_PROPERTY(type, const type &, name, internal_name, internal_obj)
+
+#define CV_WRAP_SAME_PROPERTY(type, name, internal_obj) CV_WRAP_PROPERTY(type, name, name, internal_obj)
+#define CV_WRAP_SAME_PROPERTY_S(type, name, internal_obj) CV_WRAP_PROPERTY_S(type, name, name, internal_obj)
 
 /****************************************************************************************\
 *                     Structures and macros for integration with IPP                     *
@@ -254,6 +243,9 @@ static inline IppDataType ippiGetDataType(int depth)
 #  define IPP_VERSION_X100 0
 #endif
 
+#define CV_IPP_CHECK_COND (cv::ipp::useIPP())
+#define CV_IPP_CHECK() if(CV_IPP_CHECK_COND)
+
 #ifndef IPPI_CALL
 #  define IPPI_CALL(func) CV_Assert((func) >= 0)
 #endif
@@ -298,111 +290,15 @@ typedef enum CvStatus
 }
 CvStatus;
 
+#ifdef HAVE_TEGRA_OPTIMIZATION
+namespace tegra {
 
+CV_EXPORTS bool useTegra();
+CV_EXPORTS void setUseTegra(bool flag);
 
-/****************************************************************************************\
-*                                  Auxiliary algorithms                                  *
-\****************************************************************************************/
-
-namespace cv
-{
-
-// This function splits the input sequence or set into one or more equivalence classes and
-// returns the vector of labels - 0-based class indexes for each element.
-// predicate(a,b) returns true if the two sequence elements certainly belong to the same class.
-//
-// The algorithm is described in "Introduction to Algorithms"
-// by Cormen, Leiserson and Rivest, the chapter "Data structures for disjoint sets"
-template<typename _Tp, class _EqPredicate> int
-partition( const std::vector<_Tp>& _vec, std::vector<int>& labels,
-           _EqPredicate predicate=_EqPredicate())
-{
-    int i, j, N = (int)_vec.size();
-    const _Tp* vec = &_vec[0];
-
-    const int PARENT=0;
-    const int RANK=1;
-
-    std::vector<int> _nodes(N*2);
-    int (*nodes)[2] = (int(*)[2])&_nodes[0];
-
-    // The first O(N) pass: create N single-vertex trees
-    for(i = 0; i < N; i++)
-    {
-        nodes[i][PARENT]=-1;
-        nodes[i][RANK] = 0;
-    }
-
-    // The main O(N^2) pass: merge connected components
-    for( i = 0; i < N; i++ )
-    {
-        int root = i;
-
-        // find root
-        while( nodes[root][PARENT] >= 0 )
-            root = nodes[root][PARENT];
-
-        for( j = 0; j < N; j++ )
-        {
-            if( i == j || !predicate(vec[i], vec[j]))
-                continue;
-            int root2 = j;
-
-            while( nodes[root2][PARENT] >= 0 )
-                root2 = nodes[root2][PARENT];
-
-            if( root2 != root )
-            {
-                // unite both trees
-                int rank = nodes[root][RANK], rank2 = nodes[root2][RANK];
-                if( rank > rank2 )
-                    nodes[root2][PARENT] = root;
-                else
-                {
-                    nodes[root][PARENT] = root2;
-                    nodes[root2][RANK] += rank == rank2;
-                    root = root2;
-                }
-                CV_Assert( nodes[root][PARENT] < 0 );
-
-                int k = j, parent;
-
-                // compress the path from node2 to root
-                while( (parent = nodes[k][PARENT]) >= 0 )
-                {
-                    nodes[k][PARENT] = root;
-                    k = parent;
-                }
-
-                // compress the path from node to root
-                k = i;
-                while( (parent = nodes[k][PARENT]) >= 0 )
-                {
-                    nodes[k][PARENT] = root;
-                    k = parent;
-                }
-            }
-        }
-    }
-
-    // Final O(N) pass: enumerate classes
-    labels.resize(N);
-    int nclasses = 0;
-
-    for( i = 0; i < N; i++ )
-    {
-        int root = i;
-        while( nodes[root][PARENT] >= 0 )
-            root = nodes[root][PARENT];
-        // re-use the rank as the class label
-        if( nodes[root][RANK] >= 0 )
-            nodes[root][RANK] = ~nclasses++;
-        labels[i] = ~nodes[root][RANK];
-    }
-
-    return nclasses;
 }
+#endif
 
-} // namespace cv
+//! @endcond
 
 #endif // __OPENCV_CORE_PRIVATE_HPP__

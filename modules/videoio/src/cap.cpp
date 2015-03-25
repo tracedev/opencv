@@ -61,6 +61,11 @@ template<> void DefaultDeleter<CvVideoWriter>::operator ()(CvVideoWriter* obj) c
 
 /************************* Reading AVIs & Camera data **************************/
 
+static inline double icvGetCaptureProperty( const CvCapture* capture, int id )
+{
+    return capture ? capture->getProperty(id) : 0;
+}
+
 CV_IMPL void cvReleaseCapture( CvCapture** pcapture )
 {
     if( pcapture && *pcapture )
@@ -92,7 +97,7 @@ CV_IMPL IplImage* cvRetrieveFrame( CvCapture* capture, int idx )
 
 CV_IMPL double cvGetCaptureProperty( CvCapture* capture, int id )
 {
-    return capture ? capture->getProperty(id) : 0;
+    return icvGetCaptureProperty(capture, id);
 }
 
 CV_IMPL int cvSetCaptureProperty( CvCapture* capture, int id, double value )
@@ -143,6 +148,9 @@ CV_IMPL CvCapture * cvCreateCameraCapture (int index)
 #ifdef HAVE_OPENNI
         CV_CAP_OPENNI,
 #endif
+#ifdef HAVE_OPENNI2
+        CV_CAP_OPENNI2,
+#endif
 #ifdef HAVE_ANDROID_NATIVE_CAMERA
         CV_CAP_ANDROID,
 #endif
@@ -190,6 +198,7 @@ CV_IMPL CvCapture * cvCreateCameraCapture (int index)
     defined(HAVE_UNICAP)       || \
     defined(HAVE_PVAPI)        || \
     defined(HAVE_OPENNI)       || \
+    defined(HAVE_OPENNI2)      || \
     defined(HAVE_XIMEA)        || \
     defined(HAVE_AVFOUNDATION) || \
     defined(HAVE_ANDROID_NATIVE_CAMERA) || \
@@ -305,6 +314,14 @@ CV_IMPL CvCapture * cvCreateCameraCapture (int index)
         break;
 #endif
 
+#ifdef HAVE_OPENNI2
+        case CV_CAP_OPENNI2:
+            capture = cvCreateCameraCapture_OpenNI(index);
+            if (capture)
+                return capture;
+            break;
+#endif
+
 #ifdef HAVE_ANDROID_NATIVE_CAMERA
         case CV_CAP_ANDROID:
             capture = cvCreateCameraCapture_Android (index);
@@ -351,8 +368,10 @@ CV_IMPL CvCapture * cvCreateFileCapture (const char * filename)
 {
     CvCapture * result = 0;
 
+#ifdef HAVE_FFMPEG
     if (! result)
         result = cvCreateFileCapture_FFMPEG_proxy (filename);
+#endif
 
 #ifdef HAVE_VFW
     if (! result)
@@ -409,8 +428,10 @@ CV_IMPL CvVideoWriter* cvCreateVideoWriter( const char* filename, int fourcc,
     if(!fourcc || !fps)
         result = cvCreateVideoWriter_Images(filename);
 
+#ifdef HAVE_FFMPEG
     if(!result)
         result = cvCreateVideoWriter_FFMPEG_proxy (filename, fourcc, fps, frameSize, is_color);
+#endif
 
 #ifdef HAVE_VFW
     if(!result)
@@ -440,6 +461,19 @@ CV_IMPL CvVideoWriter* cvCreateVideoWriter( const char* filename, int fourcc,
 #ifdef HAVE_GSTREAMER
     if (! result)
         result = cvCreateVideoWriter_GStreamer(filename, fourcc, fps, frameSize, is_color);
+#endif
+
+#if !defined(HAVE_FFMPEG) && \
+    !defined(HAVE_VFW) && \
+    !defined(HAVE_MSMF) && \
+    !defined(HAVE_AVFOUNDATION) && \
+    !defined(HAVE_QUICKTIME) && \
+    !defined(HAVE_QTKIT) && \
+    !defined(HAVE_GSTREAMER)
+// If none of the writers is used
+// these statements suppress 'unused parameter' warnings.
+    (void)frameSize;
+    (void)is_color;
 #endif
 
     if(!result)
@@ -568,11 +602,11 @@ bool VideoCapture::set(int propId, double value)
     return cvSetCaptureProperty(cap, propId, value) != 0;
 }
 
-double VideoCapture::get(int propId)
+double VideoCapture::get(int propId) const
 {
     if (!icap.empty())
         return icap->getProperty(propId);
-    return cvGetCaptureProperty(cap, propId);
+    return icvGetCaptureProperty(cap, propId);
 }
 
 Ptr<IVideoCapture> VideoCapture::createCameraCapture(int index)
@@ -609,15 +643,15 @@ Ptr<IVideoCapture> VideoCapture::createCameraCapture(int index)
         {
 #ifdef HAVE_DSHOW
         case CV_CAP_DSHOW:
-            capture = Ptr<IVideoCapture>(new cv::VideoCapture_DShow(index));
-            if (capture)
+            capture = makePtr<VideoCapture_DShow>(index);
+            if (capture && capture.dynamicCast<VideoCapture_DShow>()->isOpened())
                 return capture;
             break; // CV_CAP_DSHOW
 #endif
 #ifdef HAVE_INTELPERC
         case CV_CAP_INTELPERC:
-            capture = Ptr<IVideoCapture>(new cv::VideoCapture_IntelPerC());
-            if (capture)
+            capture = makePtr<VideoCapture_IntelPerC>();
+            if (capture && capture.dynamicCast<VideoCapture_IntelPerC>()->isOpened())
                 return capture;
             break; // CV_CAP_INTEL_PERC
 #endif

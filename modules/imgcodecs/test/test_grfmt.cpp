@@ -45,6 +45,69 @@
 using namespace cv;
 using namespace std;
 
+static
+bool mats_equal(const Mat& lhs, const Mat& rhs)
+{
+    if (lhs.channels() != rhs.channels() ||
+        lhs.depth() != rhs.depth() ||
+        lhs.size().height != rhs.size().height ||
+        lhs.size().width != rhs.size().width)
+    {
+        return false;
+    }
+
+    Mat diff = (lhs != rhs);
+    const Scalar s = sum(diff);
+    for (int i = 0; i < s.channels; ++i)
+    {
+        if (s[i] != 0)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static
+bool imread_compare(const string& filepath, int flags = IMREAD_COLOR)
+{
+    vector<Mat> pages;
+    if (!imreadmulti(filepath, pages, flags) ||
+        pages.empty())
+    {
+        return false;
+    }
+
+    const Mat single = imread(filepath, flags);
+    return mats_equal(single, pages[0]);
+}
+
+TEST(Imgcodecs_imread, regression)
+{
+    const char* const filenames[] =
+    {
+        "color_palette_alpha.png",
+        "multipage.tif",
+        "rle.hdr",
+        "ordinary.bmp",
+        "rle8.bmp",
+        "test_1_c1.jpg"
+    };
+
+    const string folder = string(cvtest::TS::ptr()->get_data_path()) + "/readwrite/";
+
+    for (size_t i = 0; i < sizeof(filenames) / sizeof(filenames[0]); ++i)
+    {
+        ASSERT_TRUE(imread_compare(folder + string(filenames[i]), IMREAD_UNCHANGED));
+        ASSERT_TRUE(imread_compare(folder + string(filenames[i]), IMREAD_GRAYSCALE));
+        ASSERT_TRUE(imread_compare(folder + string(filenames[i]), IMREAD_COLOR));
+        ASSERT_TRUE(imread_compare(folder + string(filenames[i]), IMREAD_ANYDEPTH));
+        ASSERT_TRUE(imread_compare(folder + string(filenames[i]), IMREAD_ANYCOLOR));
+        if (i != 2) // GDAL does not support hdr
+            ASSERT_TRUE(imread_compare(folder + string(filenames[i]), IMREAD_LOAD_GDAL));
+    }
+}
 
 class CV_GrfmtWriteBigImageTest : public cvtest::BaseTest
 {
@@ -139,9 +202,6 @@ public:
 
                     string filename = cv::tempfile(".jpg");
                     imwrite(filename, img);
-                    img = imread(filename, IMREAD_UNCHANGED);
-
-                    filename = string(ts->get_data_path() + "readwrite/test_" + char(k + 48) + "_c" + char(num_channels + 48) + ".jpg");
                     ts->printf(ts->LOG, "reading test image : %s\n", filename.c_str());
                     Mat img_test = imread(filename, IMREAD_UNCHANGED);
 
@@ -150,18 +210,22 @@ public:
                     CV_Assert(img.size() == img_test.size());
                     CV_Assert(img.type() == img_test.type());
 
-                    double n = cvtest::norm(img, img_test, NORM_L2);
-                    if ( n > 1.0)
+                    // JPEG format does not provide 100% accuracy
+                    // using fuzzy image comparison
+                    double n = cvtest::norm(img, img_test, NORM_L1);
+                    double expected = 0.05 * img.size().area();
+                    if ( n > expected)
                     {
-                        ts->printf(ts->LOG, "norm = %f \n", n);
+                        ts->printf(ts->LOG, "norm = %f > expected = %f \n", n, expected);
                         ts->set_failed_test_info(ts->FAIL_MISMATCH);
                     }
                 }
 #endif
 
 #ifdef HAVE_TIFF
-                for (int num_channels = 1; num_channels <= 3; num_channels+=2)
+                for (int num_channels = 1; num_channels <= 4; num_channels++)
                 {
+                    if (num_channels == 2) continue;
                     // tiff
                     ts->printf(ts->LOG, "image type depth:%d   channels:%d   ext: %s\n", CV_16U, num_channels, ".tiff");
                     Mat img(img_r * k, img_c * k, CV_MAKETYPE(CV_16U, num_channels), Scalar::all(0));
@@ -298,7 +362,7 @@ public:
 
             ASSERT_TRUE(img.channels() == 4);
 
-            unsigned char* img_data = (unsigned char*)img.data;
+            unsigned char* img_data = img.ptr();
 
             // Verification first pixel is red in BGRA
             ASSERT_TRUE(img_data[0] == 0x00);
@@ -318,7 +382,7 @@ public:
 
             ASSERT_TRUE(img.channels() == 3);
 
-            img_data = (unsigned char*)img.data;
+            img_data = img.ptr();
 
             // Verification first pixel is red in BGR
             ASSERT_TRUE(img_data[0] == 0x00);
@@ -336,7 +400,7 @@ public:
 
             ASSERT_TRUE(img.channels() == 3);
 
-            img_data = (unsigned char*)img.data;
+            img_data = img.ptr();
 
             // Verification first pixel is red in BGR
             ASSERT_TRUE(img_data[0] == 0x00);
@@ -354,7 +418,7 @@ public:
 
             ASSERT_TRUE(img.channels() == 3);
 
-            img_data = (unsigned char*)img.data;
+            img_data = img.ptr();
 
             // Verification first pixel is red in BGR
             ASSERT_TRUE(img_data[0] == 0x00);
@@ -433,6 +497,31 @@ TEST(Imgcodecs_Jpeg, encode_decode_optimize_jpeg)
 
     remove(output_optimized.c_str());
 }
+
+TEST(Imgcodecs_Jpeg, encode_decode_rst_jpeg)
+{
+    cvtest::TS& ts = *cvtest::TS::ptr();
+    string input = string(ts.get_data_path()) + "../cv/shared/lena.png";
+    cv::Mat img = cv::imread(input);
+    ASSERT_FALSE(img.empty());
+
+    std::vector<int> params;
+    params.push_back(IMWRITE_JPEG_RST_INTERVAL);
+    params.push_back(1);
+
+    string output_rst = cv::tempfile(".jpg");
+    EXPECT_NO_THROW(cv::imwrite(output_rst, img, params));
+    cv::Mat img_jpg_rst = cv::imread(output_rst);
+
+    string output_normal = cv::tempfile(".jpg");
+    EXPECT_NO_THROW(cv::imwrite(output_normal, img));
+    cv::Mat img_jpg_normal = cv::imread(output_normal);
+
+    EXPECT_EQ(0, cvtest::norm(img_jpg_rst, img_jpg_normal, NORM_INF));
+
+    remove(output_rst.c_str());
+}
+
 #endif
 
 
@@ -563,6 +652,46 @@ public:
 TEST(Imgcodecs_Tiff, decode_tile_remainder)
 {
     CV_GrfmtReadTifTiledWithNotFullTiles test; test.safe_run();
+}
+
+class CV_GrfmtReadTifMultiPage : public cvtest::BaseTest
+{
+private:
+    void compare(int flags)
+    {
+        const string folder = string(cvtest::TS::ptr()->get_data_path()) + "/readwrite/";
+        const int page_count = 6;
+
+        vector<Mat> pages;
+        bool res = imreadmulti(folder + "multipage.tif", pages, flags);
+        ASSERT_TRUE(res == true);
+        ASSERT_EQ(static_cast<size_t>(page_count), pages.size());
+
+        for (int i = 0; i < page_count; i++)
+        {
+            char buffer[256];
+            sprintf(buffer, "%smultipage_p%d.tif", folder.c_str(), i + 1);
+            const string filepath(buffer);
+            const Mat page = imread(filepath, flags);
+            ASSERT_TRUE(mats_equal(page, pages[i]));
+        }
+    }
+
+public:
+    void run(int)
+    {
+        compare(IMREAD_UNCHANGED);
+        compare(IMREAD_GRAYSCALE);
+        compare(IMREAD_COLOR);
+        compare(IMREAD_ANYDEPTH);
+        compare(IMREAD_ANYCOLOR);
+        // compare(IMREAD_LOAD_GDAL); // GDAL does not support multi-page TIFFs
+    }
+};
+
+TEST(Imgcodecs_Tiff, decode_multipage)
+{
+    CV_GrfmtReadTifMultiPage test; test.safe_run();
 }
 
 #endif

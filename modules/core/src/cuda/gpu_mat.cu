@@ -160,7 +160,7 @@ void cv::cuda::GpuMat::release()
     if (refcount && CV_XADD(refcount, -1) == 1)
         allocator->free(this);
 
-    data = datastart = dataend = 0;
+    dataend = data = datastart = 0;
     step = rows = cols = 0;
     refcount = 0;
 }
@@ -389,6 +389,11 @@ GpuMat& cv::cuda::GpuMat::setTo(Scalar value, InputArray _mask, Stream& stream)
     CV_DbgAssert( depth() <= CV_64F && channels() <= 4 );
 
     GpuMat mask = _mask.getGpuMat();
+
+    if (mask.empty())
+    {
+        return setTo(value, stream);
+    }
 
     CV_DbgAssert( size() == mask.size() && mask.type() == CV_8UC1 );
 

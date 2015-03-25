@@ -59,7 +59,7 @@ __kernel void meanStdDev(__global const uchar * srcptr, int src_step, int src_of
     for (int grain = groups * WGS; id < total; id += grain)
     {
 #ifdef HAVE_MASK
-#ifdef HAVE_SRC_CONT
+#ifdef HAVE_MASK_CONT
         int mask_index = id;
 #else
         int mask_index = mad24(id / cols, mask_step, id % cols);
@@ -68,7 +68,7 @@ __kernel void meanStdDev(__global const uchar * srcptr, int src_step, int src_of
 #endif
         {
 #ifdef HAVE_SRC_CONT
-            int src_index = mul24(id, srcTSIZE);
+            int src_index = id * srcTSIZE;
 #else
             int src_index = mad24(id / cols, src_step, mul24(id % cols, srcTSIZE));
 #endif

@@ -5,15 +5,14 @@ set(CMAKE_SYSTEM_PROCESSOR arm)
 set(GCC_COMPILER_VERSION "4.5.3" CACHE STRING "GCC Compiler version")
 
 set(FLOAT_ABI_SUFFIX "")
-
 if (NOT SOFTFP)
   set(FLOAT_ABI_SUFFIX "hf")
 endif()
 
 set(LINUX_DEVKIT_PATH "/home/craig/Appro/3.8.0/Source/ti_tools/linux_devkit")
 
-#set(CMAKE_C_COMPILER    arm-linux-gnueabi${FLOAT_ABI_SUFFIX}-gcc-${GCC_COMPILER_VERSION})
-#set(CMAKE_CXX_COMPILER  arm-linux-gnueabi${FLOAT_ABI_SUFFIX}-g++-${GCC_COMPILER_VERSION})
+#find_program(CMAKE_C_COMPILER NAMES arm-linux-gnueabi${FLOAT_ABI_SUFFIX}-gcc-${GCC_COMPILER_VERSION})
+#find_program(CMAKE_CXX_COMPILER NAMES arm-linux-gnueabi${FLOAT_ABI_SUFFIX}-g++-${GCC_COMPILER_VERSION})
 #set(ARM_LINUX_SYSROOT /usr/arm-linux-gnueabi${FLOAT_ABI_SUFFIX} CACHE PATH "ARM cross compilation system root")
 
 set(CMAKE_C_COMPILER    ${LINUX_DEVKIT_PATH}/arm-arago-linux-gnueabi/bin/gcc)

@@ -12,6 +12,7 @@
 //
 // Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
 // Copyright (C) 2009, Willow Garage Inc., all rights reserved.
+// Copyright (C) 2014, Itseez Inc., all rights reserved.
 // Third party copyrights are property of their respective owners.
 //
 // Redistribution and use in source and binary forms, with or without modification,
@@ -41,7 +42,7 @@
 //M*/
 
 #include "precomp.hpp"
-#include "opencl_kernels.hpp"
+#include "opencl_kernels_imgproc.hpp"
 
 #if defined (HAVE_IPP) && (IPP_VERSION_MAJOR >= 7)
 static IppStatus sts = ippInit();
@@ -50,12 +51,112 @@ static IppStatus sts = ippInit();
 namespace cv
 {
 
+template <typename T, typename ST, typename QT>
+struct Integral_SIMD
+{
+    bool operator()(const T *, size_t,
+                    ST *, size_t,
+                    QT *, size_t,
+                    ST *, size_t,
+                    Size, int) const
+    {
+        return false;
+    }
+};
+
+#if CV_SSE2
+
+template <>
+struct Integral_SIMD<uchar, int, double>
+{
+    Integral_SIMD()
+    {
+        haveSSE2 = checkHardwareSupport(CV_CPU_SSE2);
+    }
+
+    bool operator()(const uchar * src, size_t _srcstep,
+                    int * sum, size_t _sumstep,
+                    double * sqsum, size_t,
+                    int * tilted, size_t,
+                    Size size, int cn) const
+    {
+        if (sqsum || tilted || cn != 1 || !haveSSE2)
+            return false;
+
+        // the first iteration
+        memset(sum, 0, (size.width + 1) * sizeof(int));
+
+        __m128i v_zero = _mm_setzero_si128(), prev = v_zero;
+        int j = 0;
+
+        // the others
+        for (int i = 0; i < size.height; ++i)
+        {
+            const uchar * src_row = src + _srcstep * i;
+            int * prev_sum_row = (int *)((uchar *)sum + _sumstep * i) + 1;
+            int * sum_row = (int *)((uchar *)sum + _sumstep * (i + 1)) + 1;
+
+            sum_row[-1] = 0;
+
+            prev = v_zero;
+            j = 0;
+
+            for ( ; j + 7 < size.width; j += 8)
+            {
+                __m128i vsuml = _mm_loadu_si128((const __m128i *)(prev_sum_row + j));
+                __m128i vsumh = _mm_loadu_si128((const __m128i *)(prev_sum_row + j + 4));
+
+                __m128i el8shr0 = _mm_loadl_epi64((const __m128i *)(src_row + j));
+                __m128i el8shr1 = _mm_slli_si128(el8shr0, 1);
+                __m128i el8shr2 = _mm_slli_si128(el8shr0, 2);
+                __m128i el8shr3 = _mm_slli_si128(el8shr0, 3);
+
+                vsuml = _mm_add_epi32(vsuml, prev);
+                vsumh = _mm_add_epi32(vsumh, prev);
+
+                __m128i el8shr12 = _mm_add_epi16(_mm_unpacklo_epi8(el8shr1, v_zero),
+                                                 _mm_unpacklo_epi8(el8shr2, v_zero));
+                __m128i el8shr03 = _mm_add_epi16(_mm_unpacklo_epi8(el8shr0, v_zero),
+                                                 _mm_unpacklo_epi8(el8shr3, v_zero));
+                __m128i el8 = _mm_add_epi16(el8shr12, el8shr03);
+
+                __m128i el4h = _mm_add_epi16(_mm_unpackhi_epi16(el8, v_zero),
+                                             _mm_unpacklo_epi16(el8, v_zero));
+
+                vsuml = _mm_add_epi32(vsuml, _mm_unpacklo_epi16(el8, v_zero));
+                vsumh = _mm_add_epi32(vsumh, el4h);
+
+                _mm_storeu_si128((__m128i *)(sum_row + j), vsuml);
+                _mm_storeu_si128((__m128i *)(sum_row + j + 4), vsumh);
+
+                prev = _mm_add_epi32(prev, _mm_shuffle_epi32(el4h, _MM_SHUFFLE(3, 3, 3, 3)));
+            }
+
+            for (int v = sum_row[j - 1] - prev_sum_row[j - 1]; j < size.width; ++j)
+                sum_row[j] = (v += src_row[j]) + prev_sum_row[j];
+        }
+
+        return true;
+    }
+
+    bool haveSSE2;
+};
+
+#endif
+
 template<typename T, typename ST, typename QT>
 void integral_( const T* src, size_t _srcstep, ST* sum, size_t _sumstep,
                 QT* sqsum, size_t _sqsumstep, ST* tilted, size_t _tiltedstep,
                 Size size, int cn )
 {
     int x, y, k;
+
+    if (Integral_SIMD<T, ST, QT>()(src, _srcstep,
+                                   sum, _sumstep,
+                                   sqsum, _sqsumstep,
+                                   tilted, _tiltedstep,
+                                   size, cn))
+        return;
 
     int srcstep = (int)(_srcstep/sizeof(T));
     int sumstep = (int)(_sumstep/sizeof(ST));
@@ -355,35 +456,41 @@ void cv::integral( InputArray _src, OutputArray _sum, OutputArray _sqsum, Output
     };
 
 #if defined(HAVE_IPP) && !defined(HAVE_IPP_ICV_ONLY) // Disabled on ICV due invalid results
-    if( ( depth == CV_8U ) && ( sdepth == CV_32F || sdepth == CV_32S ) && ( !_tilted.needed() ) && ( !_sqsum.needed() || sqdepth == CV_64F ) && ( cn == 1 ) )
+    CV_IPP_CHECK()
     {
-        IppStatus status = ippStsErr;
-        IppiSize srcRoiSize = ippiSize( src.cols, src.rows );
-        if( sdepth == CV_32F )
+        if( ( depth == CV_8U ) && ( sdepth == CV_32F || sdepth == CV_32S ) && ( !_tilted.needed() ) && ( !_sqsum.needed() || sqdepth == CV_64F ) && ( cn == 1 ) )
         {
-            if( _sqsum.needed() )
+            IppStatus status = ippStsErr;
+            IppiSize srcRoiSize = ippiSize( src.cols, src.rows );
+            if( sdepth == CV_32F )
             {
-                status = ippiSqrIntegral_8u32f64f_C1R( (const Ipp8u*)src.data, (int)src.step, (Ipp32f*)sum.data, (int)sum.step, (Ipp64f*)sqsum.data, (int)sqsum.step, srcRoiSize, 0, 0 );
+                if( _sqsum.needed() )
+                {
+                    status = ippiSqrIntegral_8u32f64f_C1R( (const Ipp8u*)src.data, (int)src.step, (Ipp32f*)sum.data, (int)sum.step, (Ipp64f*)sqsum.data, (int)sqsum.step, srcRoiSize, 0, 0 );
+                }
+                else
+                {
+                    status = ippiIntegral_8u32f_C1R( (const Ipp8u*)src.data, (int)src.step, (Ipp32f*)sum.data, (int)sum.step, srcRoiSize, 0 );
+                }
             }
-            else
+            else if( sdepth == CV_32S )
             {
-                status = ippiIntegral_8u32f_C1R( (const Ipp8u*)src.data, (int)src.step, (Ipp32f*)sum.data, (int)sum.step, srcRoiSize, 0 );
+                if( _sqsum.needed() )
+                {
+                    status = ippiSqrIntegral_8u32s64f_C1R( (const Ipp8u*)src.data, (int)src.step, (Ipp32s*)sum.data, (int)sum.step, (Ipp64f*)sqsum.data, (int)sqsum.step, srcRoiSize, 0, 0 );
+                }
+                else
+                {
+                    status = ippiIntegral_8u32s_C1R( (const Ipp8u*)src.data, (int)src.step, (Ipp32s*)sum.data, (int)sum.step, srcRoiSize, 0 );
+                }
             }
+            if (0 <= status)
+            {
+                CV_IMPL_ADD(CV_IMPL_IPP);
+                return;
+            }
+            setIppErrorStatus();
         }
-        else if( sdepth == CV_32S )
-        {
-            if( _sqsum.needed() )
-            {
-                status = ippiSqrIntegral_8u32s64f_C1R( (const Ipp8u*)src.data, (int)src.step, (Ipp32s*)sum.data, (int)sum.step, (Ipp64f*)sqsum.data, (int)sqsum.step, srcRoiSize, 0, 0 );
-            }
-            else
-            {
-                status = ippiIntegral_8u32s_C1R( (const Ipp8u*)src.data, (int)src.step, (Ipp32s*)sum.data, (int)sum.step, srcRoiSize, 0 );
-            }
-        }
-        if (0 <= status)
-            return;
-        setIppErrorStatus();
     }
 #endif
 
@@ -419,8 +526,8 @@ void cv::integral( InputArray _src, OutputArray _sum, OutputArray _sqsum, Output
     else
         CV_Error( CV_StsUnsupportedFormat, "" );
 
-    func( src.data, src.step, sum.data, sum.step, sqsum.data, sqsum.step,
-          tilted.data, tilted.step, src.size(), cn );
+    func( src.ptr(), src.step, sum.ptr(), sum.step, sqsum.ptr(), sqsum.step,
+          tilted.ptr(), tilted.step, src.size(), cn );
 }
 
 void cv::integral( InputArray src, OutputArray sum, int sdepth )

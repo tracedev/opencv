@@ -40,7 +40,7 @@
 //M*/
 
 #include "precomp.hpp"
-#include "opencl_kernels.hpp"
+#include "opencl_kernels_imgproc.hpp"
 
 namespace cv
 {
@@ -154,7 +154,7 @@ static void histPrepareImages( const Mat* images, int nimages, const int* channe
         deltas[i*2+1] = (int)(images[j].step/esz1 - imsize.width*deltas[i*2]);
     }
 
-    if( mask.data )
+    if( !mask.empty() )
     {
         CV_Assert( mask.size() == imsize && mask.channels() == 1 );
         isContinuous = isContinuous && mask.isContinuous();
@@ -753,7 +753,7 @@ calcHist_( std::vector<uchar*>& _ptrs, const std::vector<int>& _deltas,
 {
     T** ptrs = (T**)&_ptrs[0];
     const int* deltas = &_deltas[0];
-    uchar* H = hist.data;
+    uchar* H = hist.ptr();
     int i, x;
     const uchar* mask = _ptrs[dims];
     int mstep = _deltas[dims*2 + 1];
@@ -988,7 +988,7 @@ calcHist_8u( std::vector<uchar*>& _ptrs, const std::vector<int>& _deltas,
 {
     uchar** ptrs = &_ptrs[0];
     const int* deltas = &_deltas[0];
-    uchar* H = hist.data;
+    uchar* H = hist.ptr();
     int x;
     const uchar* mask = _ptrs[dims];
     int mstep = _deltas[dims*2 + 1];
@@ -1192,14 +1192,15 @@ public:
         Mat phist(hist->size(), hist->type(), Scalar::all(0));
 
         IppStatus status = ippiHistogramEven_8u_C1R(
-            src->data + src->step * range.start, (int)src->step, ippiSize(src->cols, range.end - range.start),
-            (Ipp32s *)phist.data, (Ipp32s *)*levels, histSize, low, high);
+            src->ptr(range.start), (int)src->step, ippiSize(src->cols, range.end - range.start),
+            phist.ptr<Ipp32s>(), (Ipp32s *)*levels, histSize, low, high);
 
         if (status < 0)
         {
             *ok = false;
             return;
         }
+        CV_IMPL_ADD(CV_IMPL_IPP|CV_IMPL_MT);
 
         for (int i = 0; i < histSize; ++i)
             CV_XADD((int *)(hist->data + i * hist->step), *(int *)(phist.data + i * phist.step));
@@ -1227,35 +1228,39 @@ void cv::calcHist( const Mat* images, int nimages, const int* channels,
 
     CV_Assert(dims > 0 && histSize);
 
-    uchar* histdata = _hist.getMat().data;
+    const uchar* const histdata = _hist.getMat().ptr();
     _hist.create(dims, histSize, CV_32F);
     Mat hist = _hist.getMat(), ihist = hist;
     ihist.flags = (ihist.flags & ~CV_MAT_TYPE_MASK)|CV_32S;
 
 #ifdef HAVE_IPP
-    if (nimages == 1 && images[0].type() == CV_8UC1 && dims == 1 && channels &&
-            channels[0] == 0 && mask.empty() && images[0].dims <= 2 &&
-            !accumulate && uniform)
+    CV_IPP_CHECK()
     {
-        ihist.setTo(Scalar::all(0));
-        AutoBuffer<Ipp32s> levels(histSize[0] + 1);
-
-        bool ok = true;
-        const Mat & src = images[0];
-        int nstripes = std::min<int>(8, static_cast<int>(src.total() / (1 << 16)));
-#ifdef HAVE_CONCURRENCY
-        nstripes = 1;
-#endif
-        IPPCalcHistInvoker invoker(src, ihist, levels, histSize[0] + 1, (Ipp32s)ranges[0][0], (Ipp32s)ranges[0][1], &ok);
-        Range range(0, src.rows);
-        parallel_for_(range, invoker, nstripes);
-
-        if (ok)
+        if (nimages == 1 && images[0].type() == CV_8UC1 && dims == 1 && channels &&
+                channels[0] == 0 && mask.empty() && images[0].dims <= 2 &&
+                !accumulate && uniform)
         {
-            ihist.convertTo(hist, CV_32F);
-            return;
+            ihist.setTo(Scalar::all(0));
+            AutoBuffer<Ipp32s> levels(histSize[0] + 1);
+
+            bool ok = true;
+            const Mat & src = images[0];
+            int nstripes = std::min<int>(8, static_cast<int>(src.total() / (1 << 16)));
+#ifdef HAVE_CONCURRENCY
+            nstripes = 1;
+#endif
+            IPPCalcHistInvoker invoker(src, ihist, levels, histSize[0] + 1, (Ipp32s)ranges[0][0], (Ipp32s)ranges[0][1], &ok);
+            Range range(0, src.rows);
+            parallel_for_(range, invoker, nstripes);
+
+            if (ok)
+            {
+                ihist.convertTo(hist, CV_32F);
+                CV_IMPL_ADD(CV_IMPL_IPP|CV_IMPL_MT);
+                return;
+            }
+            setIppErrorStatus();
         }
-        setIppErrorStatus();
     }
 #endif
 
@@ -1269,7 +1274,7 @@ void cv::calcHist( const Mat* images, int nimages, const int* channels,
     std::vector<double> uniranges;
     Size imsize;
 
-    CV_Assert( !mask.data || mask.type() == CV_8UC1 );
+    CV_Assert( mask.empty() || mask.type() == CV_8UC1 );
     histPrepareImages( images, nimages, channels, mask, dims, hist.size, ranges,
                        uniform, ptrs, deltas, imsize, uniranges );
     const double* _uniranges = uniform ? &uniranges[0] : 0;
@@ -1442,7 +1447,7 @@ static void calcHist( const Mat* images, int nimages, const int* channels,
     std::vector<double> uniranges;
     Size imsize;
 
-    CV_Assert( !mask.data || mask.type() == CV_8UC1 );
+    CV_Assert( mask.empty() || mask.type() == CV_8UC1 );
     histPrepareImages( images, nimages, channels, mask, dims, hist.hdr->size, ranges,
                        uniform, ptrs, deltas, imsize, uniranges );
     const double* _uniranges = uniform ? &uniranges[0] : 0;
@@ -1586,7 +1591,7 @@ calcBackProj_( std::vector<uchar*>& _ptrs, const std::vector<int>& _deltas,
 {
     T** ptrs = (T**)&_ptrs[0];
     const int* deltas = &_deltas[0];
-    uchar* H = hist.data;
+    const uchar* H = hist.ptr();
     int i, x;
     BT* bproj = (BT*)_ptrs[dims];
     int bpstep = _deltas[dims*2 + 1];
@@ -1614,7 +1619,7 @@ calcBackProj_( std::vector<uchar*>& _ptrs, const std::vector<int>& _deltas,
                 for( x = 0; x < imsize.width; x++, p0 += d0 )
                 {
                     int idx = cvFloor(*p0*a + b);
-                    bproj[x] = (unsigned)idx < (unsigned)sz ? saturate_cast<BT>(((float*)H)[idx]*scale) : 0;
+                    bproj[x] = (unsigned)idx < (unsigned)sz ? saturate_cast<BT>(((const float*)H)[idx]*scale) : 0;
                 }
             }
         }
@@ -1637,7 +1642,7 @@ calcBackProj_( std::vector<uchar*>& _ptrs, const std::vector<int>& _deltas,
                     int idx1 = cvFloor(*p1*a1 + b1);
                     bproj[x] = (unsigned)idx0 < (unsigned)sz0 &&
                                (unsigned)idx1 < (unsigned)sz1 ?
-                        saturate_cast<BT>(((float*)(H + hstep0*idx0))[idx1]*scale) : 0;
+                        saturate_cast<BT>(((const float*)(H + hstep0*idx0))[idx1]*scale) : 0;
                 }
             }
         }
@@ -1665,7 +1670,7 @@ calcBackProj_( std::vector<uchar*>& _ptrs, const std::vector<int>& _deltas,
                     bproj[x] = (unsigned)idx0 < (unsigned)sz0 &&
                                (unsigned)idx1 < (unsigned)sz1 &&
                                (unsigned)idx2 < (unsigned)sz2 ?
-                        saturate_cast<BT>(((float*)(H + hstep0*idx0 + hstep1*idx1))[idx2]*scale) : 0;
+                        saturate_cast<BT>(((const float*)(H + hstep0*idx0 + hstep1*idx1))[idx2]*scale) : 0;
                 }
             }
         }
@@ -1675,7 +1680,7 @@ calcBackProj_( std::vector<uchar*>& _ptrs, const std::vector<int>& _deltas,
             {
                 for( x = 0; x < imsize.width; x++ )
                 {
-                    uchar* Hptr = H;
+                    const uchar* Hptr = H;
                     for( i = 0; i < dims; i++ )
                     {
                         int idx = cvFloor(*ptrs[i]*uniranges[i*2] + uniranges[i*2+1]);
@@ -1686,7 +1691,7 @@ calcBackProj_( std::vector<uchar*>& _ptrs, const std::vector<int>& _deltas,
                     }
 
                     if( i == dims )
-                        bproj[x] = saturate_cast<BT>(*(float*)Hptr*scale);
+                        bproj[x] = saturate_cast<BT>(*(const float*)Hptr*scale);
                     else
                     {
                         bproj[x] = 0;
@@ -1710,7 +1715,7 @@ calcBackProj_( std::vector<uchar*>& _ptrs, const std::vector<int>& _deltas,
         {
             for( x = 0; x < imsize.width; x++ )
             {
-                uchar* Hptr = H;
+                const uchar* Hptr = H;
                 for( i = 0; i < dims; i++ )
                 {
                     float v = (float)*ptrs[i];
@@ -1728,7 +1733,7 @@ calcBackProj_( std::vector<uchar*>& _ptrs, const std::vector<int>& _deltas,
                 }
 
                 if( i == dims )
-                    bproj[x] = saturate_cast<BT>(*(float*)Hptr*scale);
+                    bproj[x] = saturate_cast<BT>(*(const float*)Hptr*scale);
                 else
                 {
                     bproj[x] = 0;
@@ -1751,7 +1756,7 @@ calcBackProj_8u( std::vector<uchar*>& _ptrs, const std::vector<int>& _deltas,
 {
     uchar** ptrs = &_ptrs[0];
     const int* deltas = &_deltas[0];
-    uchar* H = hist.data;
+    const uchar* H = hist.ptr();
     int i, x;
     uchar* bproj = _ptrs[dims];
     int bpstep = _deltas[dims*2 + 1];
@@ -1813,7 +1818,7 @@ calcBackProj_8u( std::vector<uchar*>& _ptrs, const std::vector<int>& _deltas,
             for( x = 0; x < imsize.width; x++, p0 += d0, p1 += d1 )
             {
                 size_t idx = tab[*p0] + tab[*p1 + 256];
-                bproj[x] = idx < OUT_OF_RANGE ? saturate_cast<uchar>(*(float*)(H + idx)*scale) : 0;
+                bproj[x] = idx < OUT_OF_RANGE ? saturate_cast<uchar>(*(const float*)(H + idx)*scale) : 0;
             }
         }
     }
@@ -1831,7 +1836,7 @@ calcBackProj_8u( std::vector<uchar*>& _ptrs, const std::vector<int>& _deltas,
             for( x = 0; x < imsize.width; x++, p0 += d0, p1 += d1, p2 += d2 )
             {
                 size_t idx = tab[*p0] + tab[*p1 + 256] + tab[*p2 + 512];
-                bproj[x] = idx < OUT_OF_RANGE ? saturate_cast<uchar>(*(float*)(H + idx)*scale) : 0;
+                bproj[x] = idx < OUT_OF_RANGE ? saturate_cast<uchar>(*(const float*)(H + idx)*scale) : 0;
             }
         }
     }
@@ -1841,7 +1846,7 @@ calcBackProj_8u( std::vector<uchar*>& _ptrs, const std::vector<int>& _deltas,
         {
             for( x = 0; x < imsize.width; x++ )
             {
-                uchar* Hptr = H;
+                const uchar* Hptr = H;
                 for( i = 0; i < dims; i++ )
                 {
                     size_t idx = tab[*ptrs[i] + i*256];
@@ -1852,7 +1857,7 @@ calcBackProj_8u( std::vector<uchar*>& _ptrs, const std::vector<int>& _deltas,
                 }
 
                 if( i == dims )
-                    bproj[x] = saturate_cast<uchar>(*(float*)Hptr*scale);
+                    bproj[x] = saturate_cast<uchar>(*(const float*)Hptr*scale);
                 else
                 {
                     bproj[x] = 0;
@@ -1879,7 +1884,7 @@ void cv::calcBackProject( const Mat* images, int nimages, const int* channels,
     Size imsize;
     int dims = hist.dims == 2 && hist.size[1] == 1 ? 1 : hist.dims;
 
-    CV_Assert( dims > 0 && hist.data );
+    CV_Assert( dims > 0 && !hist.empty() );
     _backProject.create( images[0].size(), images[0].depth() );
     Mat backProject = _backProject.getMat();
     histPrepareImages( images, nimages, channels, backProject, dims, hist.size, ranges,
@@ -2233,7 +2238,7 @@ void cv::calcBackProject( InputArrayOfArrays images, const std::vector<int>& cha
         int hsz[CV_CN_MAX+1];
         memcpy(hsz, &H0.size[0], H0.dims*sizeof(hsz[0]));
         hsz[H0.dims] = hcn;
-        H = Mat(H0.dims+1, hsz, H0.depth(), H0.data);
+        H = Mat(H0.dims+1, hsz, H0.depth(), H0.ptr());
     }
     else
         H = H0;
@@ -2279,15 +2284,20 @@ double cv::compareHist( InputArray _H1, InputArray _H2, int method )
 
     CV_Assert( it.planes[0].isContinuous() && it.planes[1].isContinuous() );
 
+#if CV_SSE2
+    bool haveSIMD = checkHardwareSupport(CV_CPU_SSE2);
+#endif
+
     for( size_t i = 0; i < it.nplanes; i++, ++it )
     {
-        const float* h1 = (const float*)it.planes[0].data;
-        const float* h2 = (const float*)it.planes[1].data;
+        const float* h1 = it.planes[0].ptr<float>();
+        const float* h2 = it.planes[1].ptr<float>();
         len = it.planes[0].rows*it.planes[0].cols*H1.channels();
+        j = 0;
 
         if( (method == CV_COMP_CHISQR) || (method == CV_COMP_CHISQR_ALT))
         {
-            for( j = 0; j < len; j++ )
+            for( ; j < len; j++ )
             {
                 double a = h1[j] - h2[j];
                 double b = (method == CV_COMP_CHISQR) ? h1[j] : h1[j] + h2[j];
@@ -2297,7 +2307,51 @@ double cv::compareHist( InputArray _H1, InputArray _H2, int method )
         }
         else if( method == CV_COMP_CORREL )
         {
-            for( j = 0; j < len; j++ )
+            #if CV_SSE2
+            if (haveSIMD)
+            {
+                __m128d v_s1 = _mm_setzero_pd(), v_s2 = v_s1;
+                __m128d v_s11 = v_s1, v_s22 = v_s1, v_s12 = v_s1;
+
+                for ( ; j <= len - 4; j += 4)
+                {
+                    __m128 v_a = _mm_loadu_ps(h1 + j);
+                    __m128 v_b = _mm_loadu_ps(h2 + j);
+
+                    // 0-1
+                    __m128d v_ad = _mm_cvtps_pd(v_a);
+                    __m128d v_bd = _mm_cvtps_pd(v_b);
+                    v_s12 = _mm_add_pd(v_s12, _mm_mul_pd(v_ad, v_bd));
+                    v_s11 = _mm_add_pd(v_s11, _mm_mul_pd(v_ad, v_ad));
+                    v_s22 = _mm_add_pd(v_s22, _mm_mul_pd(v_bd, v_bd));
+                    v_s1 = _mm_add_pd(v_s1, v_ad);
+                    v_s2 = _mm_add_pd(v_s2, v_bd);
+
+                    // 2-3
+                    v_ad = _mm_cvtps_pd(_mm_castsi128_ps(_mm_srli_si128(_mm_castps_si128(v_a), 8)));
+                    v_bd = _mm_cvtps_pd(_mm_castsi128_ps(_mm_srli_si128(_mm_castps_si128(v_b), 8)));
+                    v_s12 = _mm_add_pd(v_s12, _mm_mul_pd(v_ad, v_bd));
+                    v_s11 = _mm_add_pd(v_s11, _mm_mul_pd(v_ad, v_ad));
+                    v_s22 = _mm_add_pd(v_s22, _mm_mul_pd(v_bd, v_bd));
+                    v_s1 = _mm_add_pd(v_s1, v_ad);
+                    v_s2 = _mm_add_pd(v_s2, v_bd);
+                }
+
+                double CV_DECL_ALIGNED(16) ar[10];
+                _mm_store_pd(ar, v_s12);
+                _mm_store_pd(ar + 2, v_s11);
+                _mm_store_pd(ar + 4, v_s22);
+                _mm_store_pd(ar + 6, v_s1);
+                _mm_store_pd(ar + 8, v_s2);
+
+                s12 += ar[0] + ar[1];
+                s11 += ar[2] + ar[3];
+                s22 += ar[4] + ar[5];
+                s1 += ar[6] + ar[7];
+                s2 += ar[8] + ar[9];
+            }
+            #endif
+            for( ; j < len; j++ )
             {
                 double a = h1[j];
                 double b = h2[j];
@@ -2311,12 +2365,68 @@ double cv::compareHist( InputArray _H1, InputArray _H2, int method )
         }
         else if( method == CV_COMP_INTERSECT )
         {
-            for( j = 0; j < len; j++ )
+            #if CV_NEON
+            float32x4_t v_result = vdupq_n_f32(0.0f);
+            for( ; j <= len - 4; j += 4 )
+                v_result = vaddq_f32(v_result, vminq_f32(vld1q_f32(h1 + j), vld1q_f32(h2 + j)));
+            float CV_DECL_ALIGNED(16) ar[4];
+            vst1q_f32(ar, v_result);
+            result += ar[0] + ar[1] + ar[2] + ar[3];
+            #elif CV_SSE2
+            if (haveSIMD)
+            {
+                __m128d v_result = _mm_setzero_pd();
+                for ( ; j <= len - 4; j += 4)
+                {
+                    __m128 v_src = _mm_min_ps(_mm_loadu_ps(h1 + j),
+                                              _mm_loadu_ps(h2 + j));
+                    v_result = _mm_add_pd(v_result, _mm_cvtps_pd(v_src));
+                    v_src = _mm_castsi128_ps(_mm_srli_si128(_mm_castps_si128(v_src), 8));
+                    v_result = _mm_add_pd(v_result, _mm_cvtps_pd(v_src));
+                }
+
+                double CV_DECL_ALIGNED(16) ar[2];
+                _mm_store_pd(ar, v_result);
+                result += ar[0] + ar[1];
+            }
+            #endif
+            for( ; j < len; j++ )
                 result += std::min(h1[j], h2[j]);
         }
         else if( method == CV_COMP_BHATTACHARYYA )
         {
-            for( j = 0; j < len; j++ )
+            #if CV_SSE2
+            if (haveSIMD)
+            {
+                __m128d v_s1 = _mm_setzero_pd(), v_s2 = v_s1, v_result = v_s1;
+                for ( ; j <= len - 4; j += 4)
+                {
+                    __m128 v_a = _mm_loadu_ps(h1 + j);
+                    __m128 v_b = _mm_loadu_ps(h2 + j);
+
+                    __m128d v_ad = _mm_cvtps_pd(v_a);
+                    __m128d v_bd = _mm_cvtps_pd(v_b);
+                    v_s1 = _mm_add_pd(v_s1, v_ad);
+                    v_s2 = _mm_add_pd(v_s2, v_bd);
+                    v_result = _mm_add_pd(v_result, _mm_sqrt_pd(_mm_mul_pd(v_ad, v_bd)));
+
+                    v_ad = _mm_cvtps_pd(_mm_castsi128_ps(_mm_srli_si128(_mm_castps_si128(v_a), 8)));
+                    v_bd = _mm_cvtps_pd(_mm_castsi128_ps(_mm_srli_si128(_mm_castps_si128(v_b), 8)));
+                    v_s1 = _mm_add_pd(v_s1, v_ad);
+                    v_s2 = _mm_add_pd(v_s2, v_bd);
+                    v_result = _mm_add_pd(v_result, _mm_sqrt_pd(_mm_mul_pd(v_ad, v_bd)));
+                }
+
+                double CV_DECL_ALIGNED(16) ar[6];
+                _mm_store_pd(ar, v_s1);
+                _mm_store_pd(ar + 2, v_s2);
+                _mm_store_pd(ar + 4, v_result);
+                s1 += ar[0] + ar[1];
+                s2 += ar[2] + ar[3];
+                result += ar[4] + ar[5];
+            }
+            #endif
+            for( ; j < len; j++ )
             {
                 double a = h1[j];
                 double b = h2[j];
@@ -2327,7 +2437,7 @@ double cv::compareHist( InputArray _H1, InputArray _H2, int method )
         }
         else if( method == CV_COMP_KL_DIV )
         {
-            for( j = 0; j < len; j++ )
+            for( ; j < len; j++ )
             {
                 double p = h1[j];
                 double q = h2[j];

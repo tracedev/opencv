@@ -48,6 +48,10 @@
 extern "C" {
 #endif /* __cplusplus */
 
+/** @addtogroup imgcodecs_c
+  @{
+  */
+
 enum
 {
 /* 8bit, color or not */
@@ -76,6 +80,9 @@ enum
     CV_IMWRITE_JPEG_QUALITY =1,
     CV_IMWRITE_JPEG_PROGRESSIVE =2,
     CV_IMWRITE_JPEG_OPTIMIZE =3,
+    CV_IMWRITE_JPEG_RST_INTERVAL =4,
+    CV_IMWRITE_JPEG_LUMA_QUALITY =5,
+    CV_IMWRITE_JPEG_CHROMA_QUALITY =6,
     CV_IMWRITE_PNG_COMPRESSION =16,
     CV_IMWRITE_PNG_STRATEGY =17,
     CV_IMWRITE_PNG_BILEVEL =18,
@@ -121,6 +128,7 @@ CVAPI(int) cvHaveImageWriter(const char* filename);
 #define cvvSaveImage cvSaveImage
 #define cvvConvertImage cvConvertImage
 
+/** @} imgcodecs_c */
 
 #ifdef __cplusplus
 }

@@ -10,8 +10,7 @@
 //                           License Agreement
 //                For Open Source Computer Vision Library
 //
-// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
-// Copyright (C) 2009, Willow Garage Inc., all rights reserved.
+// Copyright (C) 2014, Itseez Inc., all rights reserved.
 // Third party copyrights are property of their respective owners.
 //
 // Redistribution and use in source and binary forms, with or without modification,
@@ -41,7 +40,7 @@
 //M*/
 
 #include "precomp.hpp"
-#include "opencl_kernels.hpp"
+#include "opencl_kernels_core.hpp"
 
 ///////////////////////////////// UMat implementation ///////////////////////////////
 
@@ -56,7 +55,7 @@ UMatData::UMatData(const MatAllocator* allocator)
     prevAllocator = currAllocator = allocator;
     urefcount = refcount = 0;
     data = origdata = 0;
-    size = 0; capacity = 0;
+    size = 0;
     flags = 0;
     handle = 0;
     userdata = 0;
@@ -68,7 +67,7 @@ UMatData::~UMatData()
     prevAllocator = currAllocator = 0;
     urefcount = refcount = 0;
     data = origdata = 0;
-    size = 0; capacity = 0;
+    size = 0;
     flags = 0;
     handle = 0;
     userdata = 0;
@@ -222,7 +221,7 @@ UMat Mat::getUMat(int accessFlags, UMatUsageFlags usageFlags) const
         temp_u = a->allocate(dims, size.p, type(), data, step.p, accessFlags, usageFlags);
         temp_u->refcount = 1;
     }
-    UMat::getStdAllocator()->allocate(temp_u, accessFlags, usageFlags);
+    UMat::getStdAllocator()->allocate(temp_u, accessFlags, usageFlags); // TODO result is not checked
     hdr.flags = flags;
     setSize(hdr, dims, size.p, step.p);
     finalizeHdr(hdr);
@@ -576,13 +575,13 @@ Mat UMat::getMat(int accessFlags) const
 {
     if(!u)
         return Mat();
-    u->currAllocator->map(u, accessFlags | ACCESS_READ);
+    u->currAllocator->map(u, accessFlags | ACCESS_READ); // TODO Support ACCESS_WRITE without unnecessary data transfers
     CV_Assert(u->data != 0);
     Mat hdr(dims, size.p, type(), u->data + offset, step.p);
     hdr.flags = flags;
     hdr.u = u;
     hdr.datastart = u->data;
-    hdr.data = hdr.datastart + offset;
+    hdr.data = u->data + offset;
     hdr.datalimit = hdr.dataend = u->data + u->size;
     CV_XADD(&hdr.u->refcount, 1);
     return hdr;
@@ -593,15 +592,16 @@ void* UMat::handle(int accessFlags) const
     if( !u )
         return 0;
 
-    if ((accessFlags & ACCESS_WRITE) != 0)
-        u->markHostCopyObsolete(true);
-
     // check flags: if CPU copy is newer, copy it back to GPU.
     if( u->deviceCopyObsolete() )
     {
         CV_Assert(u->refcount == 0);
         u->currAllocator->unmap(u);
     }
+
+    if ((accessFlags & ACCESS_WRITE) != 0)
+        u->markHostCopyObsolete(true);
+
     return u->handle;
 }
 
@@ -657,7 +657,7 @@ void UMat::copyTo(OutputArray _dst) const
     }
 
     Mat dst = _dst.getMat();
-    u->currAllocator->download(u, dst.data, dims, sz, srcofs, step.p, dst.step.p);
+    u->currAllocator->download(u, dst.ptr(), dims, sz, srcofs, step.p, dst.step.p);
 }
 
 void UMat::copyTo(OutputArray _dst, InputArray _mask) const
@@ -696,7 +696,10 @@ void UMat::copyTo(OutputArray _dst, InputArray _mask) const
 
             size_t globalsize[2] = { cols, rows };
             if (k.run(2, globalsize, NULL, false))
+            {
+                CV_IMPL_ADD(CV_IMPL_OCL);
                 return;
+            }
         }
     }
 #endif
@@ -752,7 +755,10 @@ void UMat::convertTo(OutputArray _dst, int _type, double alpha, double beta) con
 
             size_t globalsize[2] = { dst.cols * cn, (dst.rows + rowsPerWI - 1) / rowsPerWI };
             if (k.run(2, globalsize, NULL, false))
+            {
+                CV_IMPL_ADD(CV_IMPL_OCL);
                 return;
+            }
         }
     }
 #endif
@@ -764,25 +770,29 @@ UMat& UMat::setTo(InputArray _value, InputArray _mask)
 {
     bool haveMask = !_mask.empty();
 #ifdef HAVE_OPENCL
-    int tp = type(), cn = CV_MAT_CN(tp);
+    int tp = type(), cn = CV_MAT_CN(tp), d = CV_MAT_DEPTH(tp);
 
     if( dims <= 2 && cn <= 4 && CV_MAT_DEPTH(tp) < CV_64F && ocl::useOpenCL() )
     {
         Mat value = _value.getMat();
         CV_Assert( checkScalar(value, type(), _value.kind(), _InputArray::UMAT) );
-        double buf[4] = { 0, 0, 0, 0 };
-        convertAndUnrollScalar(value, tp, (uchar *)buf, 1);
+        int kercn = haveMask || cn == 3 ? cn : std::max(cn, ocl::predictOptimalVectorWidth(*this)),
+                kertp = CV_MAKE_TYPE(d, kercn);
 
-        int scalarcn = cn == 3 ? 4 : cn, rowsPerWI = ocl::Device::getDefault().isIntel() ? 4 : 1;
+        double buf[16] = { 0, 0, 0, 0, 0, 0, 0, 0,
+                           0, 0, 0, 0, 0, 0, 0, 0 };
+        convertAndUnrollScalar(value, tp, (uchar *)buf, kercn / cn);
+
+        int scalarcn = kercn == 3 ? 4 : kercn, rowsPerWI = ocl::Device::getDefault().isIntel() ? 4 : 1;
         String opts = format("-D dstT=%s -D rowsPerWI=%d -D dstST=%s -D dstT1=%s -D cn=%d",
-                             ocl::memopTypeToStr(tp), rowsPerWI,
-                             ocl::memopTypeToStr(CV_MAKETYPE(tp, scalarcn)),
-                             ocl::memopTypeToStr(CV_MAT_DEPTH(tp)), cn);
+                             ocl::memopTypeToStr(kertp), rowsPerWI,
+                             ocl::memopTypeToStr(CV_MAKETYPE(d, scalarcn)),
+                             ocl::memopTypeToStr(d), kercn);
 
         ocl::Kernel setK(haveMask ? "setMask" : "set", ocl::core::copyset_oclsrc, opts);
         if( !setK.empty() )
         {
-            ocl::KernelArg scalararg(0, 0, 0, 0, buf, CV_ELEM_SIZE1(tp) * scalarcn);
+            ocl::KernelArg scalararg(0, 0, 0, 0, buf, CV_ELEM_SIZE(d) * scalarcn);
             UMat mask;
 
             if( haveMask )
@@ -795,13 +805,16 @@ UMat& UMat::setTo(InputArray _value, InputArray _mask)
             }
             else
             {
-                ocl::KernelArg dstarg = ocl::KernelArg::WriteOnly(*this);
+                ocl::KernelArg dstarg = ocl::KernelArg::WriteOnly(*this, cn, kercn);
                 setK.args(dstarg, scalararg);
             }
 
-            size_t globalsize[] = { cols, (rows + rowsPerWI - 1) / rowsPerWI };
+            size_t globalsize[] = { cols * cn / kercn, (rows + rowsPerWI - 1) / rowsPerWI };
             if( setK.run(2, globalsize, NULL, false) )
+            {
+                CV_IMPL_ADD(CV_IMPL_OCL);
                 return *this;
+            }
         }
     }
 #endif

@@ -193,7 +193,9 @@ cvStartFindContours( void* _img, CvMemStorage* storage,
 
     if( !((CV_IS_MASK_ARR( mat ) && mode < CV_RETR_FLOODFILL) ||
           (CV_MAT_TYPE(mat->type) == CV_32SC1 && mode == CV_RETR_FLOODFILL)) )
-        CV_Error( CV_StsUnsupportedFormat, "[Start]FindContours support only 8uC1 and 32sC1 images" );
+        CV_Error( CV_StsUnsupportedFormat,
+                  "[Start]FindContours supports only CV_8UC1 images when mode != CV_RETR_FLOODFILL "
+                  "otherwise supports CV_32SC1 images only" );
 
     CvSize size = cvSize( mat->width, mat->height );
     int step = mat->step;
@@ -1704,8 +1706,10 @@ void cv::findContours( InputOutputArray _image, OutputArrayOfArrays _contours,
                    OutputArray _hierarchy, int mode, int method, Point offset )
 {
     // Sanity check: output must be of type vector<vector<Point>>
-    CV_Assert( _contours.kind() == _InputArray::STD_VECTOR_VECTOR &&
-               _contours.channels() == 2 && _contours.depth() == CV_32S );
+    CV_Assert((_contours.kind() == _InputArray::STD_VECTOR_VECTOR || _contours.kind() == _InputArray::STD_VECTOR_MAT ||
+                _contours.kind() == _InputArray::STD_VECTOR_UMAT));
+
+    CV_Assert(_contours.empty() || (_contours.channels() == 2 && _contours.depth() == CV_32S));
 
     Mat image = _image.getMat();
     MemStorage storage(cvCreateMemStorage());
@@ -1730,7 +1734,7 @@ void cv::findContours( InputOutputArray _image, OutputArrayOfArrays _contours,
         _contours.create((int)c->total, 1, CV_32SC2, i, true);
         Mat ci = _contours.getMat(i);
         CV_Assert( ci.isContinuous() );
-        cvCvtSeqToArray(c, ci.data);
+        cvCvtSeqToArray(c, ci.ptr());
     }
 
     if( _hierarchy.needed() )

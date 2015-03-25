@@ -76,6 +76,9 @@
 /* ffmpeg in Gentoo */
 #cmakedefine HAVE_GENTOO_FFMPEG
 
+/* Geospatial Data Abstraction Library */
+#cmakedefine HAVE_GDAL
+
 /* GStreamer multimedia framework */
 #cmakedefine HAVE_GSTREAMER
 
@@ -119,6 +122,7 @@
 /* OpenCL Support */
 #cmakedefine HAVE_OPENCL
 #cmakedefine HAVE_OPENCL_STATIC
+#cmakedefine HAVE_OPENCL_SVM
 
 /* OpenEXR codec */
 #cmakedefine HAVE_OPENEXR
@@ -128,6 +132,9 @@
 
 /* OpenNI library */
 #cmakedefine HAVE_OPENNI
+
+/* OpenNI library */
+#cmakedefine HAVE_OPENNI2
 
 /* PNG codec */
 #cmakedefine HAVE_PNG
@@ -161,9 +168,6 @@
 
 /* Win32 UI */
 #cmakedefine HAVE_WIN32UI
-
-/* Windows Runtime support */
-#cmakedefine HAVE_WINRT
 
 /* XIMEA camera support */
 #cmakedefine HAVE_XIMEA
