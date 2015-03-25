@@ -160,12 +160,16 @@ namespace cv { namespace gpu { namespace device
         template <int green_bits, int bidx> struct RGB2RGB5x5Converter;
         template<int bidx> struct RGB2RGB5x5Converter<6, bidx>
         {
-            template <typename T>
-            static __device__ __forceinline__ ushort cvt(const T& src)
+            static __device__ __forceinline__ ushort cvt(const uchar3& src)
             {
-                uint b = bidx == 0 ? src.x : src.z;
-                uint g = src.y;
-                uint r = bidx == 0 ? src.z : src.x;
+                return (ushort)(((&src.x)[bidx] >> 3) | ((src.y & ~3) << 3) | (((&src.x)[bidx^2] & ~7) << 8));
+            }
+
+            static __device__ __forceinline__ ushort cvt(uint src)
+            {
+                uint b = 0xffu & (src >> (bidx * 8));
+                uint g = 0xffu & (src >> 8);
+                uint r = 0xffu & (src >> ((bidx ^ 2) * 8));
                 return (ushort)((b >> 3) | ((g & ~3) << 3) | ((r & ~7) << 8));
             }
         };
@@ -174,25 +178,22 @@ namespace cv { namespace gpu { namespace device
         {
             static __device__ __forceinline__ ushort cvt(const uchar3& src)
             {
-                uint b = bidx == 0 ? src.x : src.z;
-                uint g = src.y;
-                uint r = bidx == 0 ? src.z : src.x;
-                return (ushort)((b >> 3) | ((g & ~7) << 2) | ((r & ~7) << 7));
+                return (ushort)(((&src.x)[bidx] >> 3) | ((src.y & ~7) << 2) | (((&src.x)[bidx^2] & ~7) << 7));
             }
 
-            static __device__ __forceinline__ ushort cvt(const uchar4& src)
+            static __device__ __forceinline__ ushort cvt(uint src)
             {
-                uint b = bidx == 0 ? src.x : src.z;
-                uint g = src.y;
-                uint r = bidx == 0 ? src.z : src.x;
-                uint a = src.w;
+                uint b = 0xffu & (src >> (bidx * 8));
+                uint g = 0xffu & (src >> 8);
+                uint r = 0xffu & (src >> ((bidx ^ 2) * 8));
+                uint a = 0xffu & (src >> 24);
                 return (ushort)((b >> 3) | ((g & ~7) << 2) | ((r & ~7) << 7) | (a * 0x8000));
             }
         };
 
         template<int scn, int bidx, int green_bits> struct RGB2RGB5x5;
 
-        template<int bidx, int green_bits> struct RGB2RGB5x5<3, bidx, green_bits> : unary_function<uchar3, ushort>
+        template<int bidx, int green_bits> struct RGB2RGB5x5<3, bidx,green_bits> : unary_function<uchar3, ushort>
         {
             __device__ __forceinline__ ushort operator()(const uchar3& src) const
             {
@@ -203,9 +204,9 @@ namespace cv { namespace gpu { namespace device
             __host__ __device__ __forceinline__ RGB2RGB5x5(const RGB2RGB5x5&) {}
         };
 
-        template<int bidx, int green_bits> struct RGB2RGB5x5<4, bidx, green_bits> : unary_function<uchar4, ushort>
+        template<int bidx, int green_bits> struct RGB2RGB5x5<4, bidx,green_bits> : unary_function<uint, ushort>
         {
-            __device__ __forceinline__ ushort operator()(const uchar4& src) const
+            __device__ __forceinline__ ushort operator()(uint src) const
             {
                 return RGB2RGB5x5Converter<green_bits, bidx>::cvt(src);
             }
@@ -1821,7 +1822,7 @@ namespace cv { namespace gpu { namespace device
 
             dst.x = saturate_cast<uchar>(dstf.x * 2.55f);
             dst.y = saturate_cast<uchar>(dstf.y * 0.72033898305084743f + 96.525423728813564f);
-            dst.z = saturate_cast<uchar>(dstf.z * 0.9732824427480916f + 136.259541984732824f);
+            dst.z = saturate_cast<uchar>(dstf.z * 0.99609375f + 139.453125f);
         }
 
         template <typename T, int scn, int dcn, bool srgb, int blueIdx> struct RGB2Luv;
@@ -1915,7 +1916,7 @@ namespace cv { namespace gpu { namespace device
 
             srcf.x = src.x * (100.f / 255.f);
             srcf.y = src.y * 1.388235294117647f - 134.f;
-            srcf.z = src.z * 1.027450980392157f - 140.f;
+            srcf.z = src.z * 1.003921568627451f - 140.f;
 
             Luv2RGBConvert_f<srgb, blueIdx>(srcf, dstf);
 

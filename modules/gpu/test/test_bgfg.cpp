@@ -98,13 +98,10 @@ GPU_TEST_P(FGDStatModel, Update)
     cap >> frame;
     ASSERT_FALSE(frame.empty());
 
-    cv::Mat frameSmall;
-    cv::resize(frame, frameSmall, cv::Size(), 0.5, 0.5);
-
-    IplImage ipl_frame = frameSmall;
+    IplImage ipl_frame = frame;
     cv::Ptr<CvBGStatModel> model(cvCreateFGDStatModel(&ipl_frame));
 
-    cv::gpu::GpuMat d_frame(frameSmall);
+    cv::gpu::GpuMat d_frame(frame);
     cv::gpu::FGDStatModel d_model(out_cn);
     d_model.create(d_frame);
 
@@ -112,17 +109,18 @@ GPU_TEST_P(FGDStatModel, Update)
     cv::Mat h_foreground;
     cv::Mat h_background3;
 
+    cv::Mat backgroundDiff;
+    cv::Mat foregroundDiff;
+
     for (int i = 0; i < 5; ++i)
     {
         cap >> frame;
         ASSERT_FALSE(frame.empty());
 
-        cv::resize(frame, frameSmall, cv::Size(), 0.5, 0.5);
-
-        ipl_frame = frameSmall;
+        ipl_frame = frame;
         int gold_count = cvUpdateBGStatModel(&ipl_frame, model);
 
-        d_frame.upload(frameSmall);
+        d_frame.upload(frame);
 
         int count = d_model.update(d_frame);
 
