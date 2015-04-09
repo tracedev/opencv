@@ -1,0 +1,4 @@
+% mkdir arm
+% cd arm
+% cmake -DCMAKE_TOOLCHAIN_FILE=../platforms/linux/arm-gnueabi.toolchain.cmake -DBUILD_EXAMPLES=ON ..
+% make
