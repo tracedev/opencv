@@ -2,6 +2,7 @@ set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_VERSION 1)
 set(CMAKE_SYSTEM_PROCESSOR arm)
 
+#set(GCC_COMPILER_VERSION "4.6" CACHE STRING "GCC Compiler version")
 set(GCC_COMPILER_VERSION "4.5.3" CACHE STRING "GCC Compiler version")
 
 set(FLOAT_ABI_SUFFIX "")
@@ -9,25 +10,37 @@ if (NOT SOFTFP)
   set(FLOAT_ABI_SUFFIX "hf")
 endif()
 
-set(LINUX_DEVKIT_PATH "/home/craig/Appro/3.8.0/Source/ti_tools/linux_devkit")
+# Add variables for the compiler prefex and root path
+#set(LINUX_DEVKIT_PATH "/home/joehler/trace/ipnc_rdk/Source/ti_tools/linux_devkit" )
+#set(LINUX_DEVKIT_PATH "/home/craig/Appro/3.8.0/Source/ti_tools/linux_devkit")
+set(COMPILER_PREFIX arm-arago-linux-gnueabi )
+set( USER_ROOT_PATH /home/joehler/trace/ipnc_rdk/Source/ti_tools/linux_devkit )
 
+# which compilers to use for C and C++
+find_program(CMAKE_C_COMPILER NAMES ${COMPILER_PREFIX}-gcc)
+find_program(CMAKE_CXX_COMPILER NAMES ${COMPILER_PREFIX}-g++)
 #find_program(CMAKE_C_COMPILER NAMES arm-linux-gnueabi${FLOAT_ABI_SUFFIX}-gcc-${GCC_COMPILER_VERSION})
 #find_program(CMAKE_CXX_COMPILER NAMES arm-linux-gnueabi${FLOAT_ABI_SUFFIX}-g++-${GCC_COMPILER_VERSION})
 #set(ARM_LINUX_SYSROOT /usr/arm-linux-gnueabi${FLOAT_ABI_SUFFIX} CACHE PATH "ARM cross compilation system root")
+set(ARM_LINUX_SYSROOT ${USER_ROOT_PATH} CACHE PATH "ARM cross compilation system root") 
 
-set(CMAKE_C_COMPILER    ${LINUX_DEVKIT_PATH}/arm-arago-linux-gnueabi/bin/gcc)
-set(CMAKE_CXX_COMPILER  ${LINUX_DEVKIT_PATH}/arm-arago-linux-gnueabi/bin/g++)
-set(ARM_LINUX_SYSROOT ${LINUX_DEVKIT_PATH}/arm-arago-linux-gnueabi${FLOAT_ABI_SUFFIX} CACHE PATH "ARM cross compilation system root")
+# Alternate way to find compilers
+#set(CMAKE_C_COMPILER    ${LINUX_DEVKIT_PATH}/bin/arm-arago-linux-gnueabi-gcc )
+#set(CMAKE_CXX_COMPILER  ${LINUX_DEVKIT_PATH}/bin/arm-arago-linux-gnueabi-g++)
+#set(CMAKE_C_LINK_EXECUTABLE ${LINUX_DEVKIT_PATH}/bin/arm-arago-linux-gnueabi-ld)
+#set(CMAKE_CXX_LINK_EXECUTABLE ${LINUX_DEVKIT_PATH}/bin/arm-arago-linux-gnueabi-ld)
+#include_directories( ${LINUX_DEVKIT_PATH}/arm-arago-linux-gnueabi/usr/include/ )
+#set(ARM_LINUX_SYSROOT ${LINUX_DEVKIT_PATH}/arm-arago-linux-gnueabi CACHE PATH "ARM cross compilation system root")
 
-#set(CMAKE_CXX_FLAGS           ""                    CACHE STRING "c++ flags")
-#set(CMAKE_C_FLAGS             ""                    CACHE STRING "c flags")
-#set(CMAKE_SHARED_LINKER_FLAGS ""                    CACHE STRING "shared linker flags")
-#set(CMAKE_MODULE_LINKER_FLAGS ""                    CACHE STRING "module linker flags")
+set(CMAKE_CXX_FLAGS           ""                    CACHE STRING "c++ flags")
+set(CMAKE_C_FLAGS             ""                    CACHE STRING "c flags")
+set(CMAKE_SHARED_LINKER_FLAGS ""                    CACHE STRING "shared linker flags")
+set(CMAKE_MODULE_LINKER_FLAGS ""                    CACHE STRING "module linker flags")
 
-set(CMAKE_CXX_FLAGS           "-I${LINUX_DEVKIT_PATH}/arm-linux-gnueabi${FLOAT_ABI_SUFFIX}/include"                   CACHE STRING "c++ flags")
-set(CMAKE_C_FLAGS             "-I${LINUX_DEVKIT_PATH}/arm-linux-gnueabi${FLOAT_ABI_SUFFIX}/include"                    CACHE STRING "c flags")
-set(CMAKE_SHARED_LINKER_FLAGS "-L${LINUX_DEVKIT_PATH}/arm-linux-gnueabi${FLOAT_ABI_SUFFIX}/lib"                    CACHE STRING "shared linker flags")
-set(CMAKE_MODULE_LINKER_FLAGS "-L${LINUX_DEVKIT_PATH}/arm-linux-gnueabi${FLOAT_ABI_SUFFIX}/lib"                    CACHE STRING "module linker flags")
+#set(CMAKE_CXX_FLAGS           "-I${LINUX_DEVKIT_PATH}/arm-linux-gnueabi${FLOAT_ABI_SUFFIX}/include"                   CACHE STRING "c++ flags")
+#set(CMAKE_C_FLAGS             "-I${LINUX_DEVKIT_PATH}/arm-linux-gnueabi${FLOAT_ABI_SUFFIX}/include"                    CACHE STRING "c flags")
+#set(CMAKE_SHARED_LINKER_FLAGS "-L${LINUX_DEVKIT_PATH}/arm-arago-linux-gnueabi${FLOAT_ABI_SUFFIX}/lib"                    CACHE STRING "shared linker flags")
+#set(CMAKE_MODULE_LINKER_FLAGS "-L${LINUX_DEVKIT_PATH}/arm-arago-linux-gnueabi${FLOAT_ABI_SUFFIX}/lib"                    CACHE STRING "module linker flags")
 
 set(CMAKE_EXE_LINKER_FLAGS    "-Wl,-z,nocopyreloc"  CACHE STRING "executable linker flags")
 
@@ -46,7 +59,8 @@ elseif(USE_VFPV3)
   set(ENABLE_VFPV3 TRUE)
 endif()
 
-set(CMAKE_FIND_ROOT_PATH ${CMAKE_FIND_ROOT_PATH} ${ARM_LINUX_SYSROOT})
+#set(CMAKE_FIND_ROOT_PATH ${CMAKE_FIND_ROOT_PATH} ${ARM_LINUX_SYSROOT})
+set(CMAKE_FIND_ROOT_PATH ${CMAKE_FIND_ROOT_PATH} ${ARM_LINUX_SYSROOT} ${ARM_LINUX_SYSROOT}/bin )
 
 if(EXISTS ${CUDA_TOOLKIT_ROOT_DIR})
     set(CMAKE_FIND_ROOT_PATH ${CMAKE_FIND_ROOT_PATH} ${CUDA_TOOLKIT_ROOT_DIR})
@@ -56,6 +70,8 @@ set( CMAKE_SKIP_RPATH TRUE CACHE BOOL "If set, runtime paths are not added when 
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM ONLY)
+#set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+#set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM BOTH)
 
 # macro to find programs on the host OS
 macro( find_host_program )
