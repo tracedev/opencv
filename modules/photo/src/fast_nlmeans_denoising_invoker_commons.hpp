@@ -60,19 +60,19 @@ template <typename T> struct pixelInfo: public pixelInfo_<T>
 {
     using typename pixelInfo_<T>::sampleType;
 
-    static inline sampleType sampleMax()
+    static inline typename pixelInfo_<T>::sampleType sampleMax()
     {
-        return std::numeric_limits<sampleType>::max();
+        return std::numeric_limits<typename pixelInfo_<T>::sampleType>::max();
     }
 
-    static inline sampleType sampleMin()
+    static inline typename pixelInfo_<T>::sampleType sampleMin()
     {
-        return std::numeric_limits<sampleType>::min();
+        return std::numeric_limits<typename pixelInfo_<T>::sampleType>::min();
     }
 
     static inline size_t sampleBytes()
     {
-        return sizeof(sampleType);
+        return sizeof(typename pixelInfo_<T>::sampleType);
     }
 
     static inline size_t sampleBits()
