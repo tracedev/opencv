@@ -314,7 +314,9 @@ enum
 
     CV_CAP_GIGANETIX = 1300,  // Smartek Giganetix GigEVisionSDK
 
-    CV_CAP_INTELPERC = 1500 // Intel Perceptual Computing SDK
+    CV_CAP_INTELPERC = 1500, // Intel Perceptual Computing SDK
+
+    CV_CAP_TRACE = 1600 // Trace Systems proprietary driver
 };
 
 /* start capturing frames from camera: index = camera_index + domain_offset (CV_CAP_*) */

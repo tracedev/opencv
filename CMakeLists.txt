@@ -165,6 +165,7 @@ OCV_OPTION(WITH_OPENCL         "Include OpenCL Runtime support"              ON 
 OCV_OPTION(WITH_OPENCLAMDFFT   "Include AMD OpenCL FFT library support"      ON   IF (NOT ANDROID AND NOT IOS) )
 OCV_OPTION(WITH_OPENCLAMDBLAS  "Include AMD OpenCL BLAS library support"     ON   IF (NOT ANDROID AND NOT IOS) )
 OCV_OPTION(WITH_INTELPERC      "Include Intel Perceptual Computing support"  OFF  IF WIN32 )
+OCV_OPTION(WITH_TRACE          "Include Trace Systems support "  OFF  IF WIN32 )
 
 # OpenCV build components
 # ===================================================
@@ -928,6 +929,11 @@ endif(DEFINED WITH_XINE)
 if(DEFINED WITH_INTELPERC)
   status("    Intel PerC:"     HAVE_INTELPERC      THEN "YES"                                 ELSE NO)
 endif(DEFINED WITH_INTELPERC)
+
+if(DEFINED WITH_TRACE)
+  set(HAVE_TRACE "YES")
+  status("    Trace:"     HAVE_TRACE      THEN "YES"                                 ELSE NO)
+endif(DEFINED WITH_TRACE)
 
 
 # ========================== Other third-party libraries ==========================
