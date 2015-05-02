@@ -38,8 +38,22 @@ private:
     fd devMemFd;
     uint32_t physAddress;
 
-    // Cache converted frames
-    OutputMap frameColor;
+    // Cache converted frame
+    struct frameInternal
+    {
+        IplImage *retrieveFrame()
+        {
+            if (matFrame.empty())
+                return NULL;
+            iplFrame = IplImage(matFrame);
+            return &iplFrame;
+        }
+        cv::Mat matFrame;
+    private:
+        IplImage iplFrame;
+    }
+
+    frameInternal frameBgr;
     
 };
 
@@ -155,10 +169,11 @@ IplImage* CvCaptureCAM_Trace::retrieveFrame(int)
     // Convert from 16-bit YUYV to BGR24
     if (pMemVirtualAddressBuffer) {
         // Create matrix container for raw frame buffer
-        cv::Mat YUV_frame = cv:Mat(frame_w, frame_h, CV_8UC2, pMemVirtualAddressBuffer);
-        cvtColor(YUV_frame, frameColor.res, CV_YUV2BGR_YUYV);
+        cv::Mat matYuvColor = cv:Mat(frame_h, frame_w, CV_8UC2, pMemVirtualAddressBuffer);
+        // Perform the colorspace conversion
+        cvtColor(matYuvColor, frameBgr.matFrame.res, CV_YUV2BGR_YUYV);
 
-        return frameColor.getIplImagePtr();
+        return frameBgr.retrieveFrame();
     } else {
         return NULL;
     }
