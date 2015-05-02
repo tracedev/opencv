@@ -224,6 +224,10 @@ if(HAVE_INTELPERC)
   list(APPEND HIGHGUI_LIBRARIES ${INTELPERC_LIBRARIES})
 endif(HAVE_INTELPERC)
 
+if(HAVE_TRACE)
+  list(APPEND highgui_srcs src/cap_trace.cpp)
+endif(HAVE_TRACE)
+
 if(IOS)
   add_definitions(-DHAVE_IOS=1)
   list(APPEND highgui_srcs src/ios_conversions.mm src/cap_ios_abstract_camera.mm src/cap_ios_photo_camera.mm src/cap_ios_video_camera.mm)

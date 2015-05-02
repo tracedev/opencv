@@ -1,9 +1,21 @@
 #ifdef HAVE_TRACE
 
 #include "precomp.hpp"
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+
+// For cvtColor
+#include "opencv2/imgproc/imgproc.hpp"
 
 #define PATH_PHYSICAL_ADDRESS "/dev/shm/camera_buffer_pa"
 #define PATH_DEV_MEM "/dev/mem"
+
+#define FRAME_W (1024)
+#define FRAME_H (576)
+#define FRAME_D (2)
+
+#define FRAME_SIZE (FRAME_W * FRAME_H * FRAME_D)
 
 // Capture video frames from Trace video camera
 
@@ -17,7 +29,7 @@ public:
     virtual void close();
 
     virtual double getProperty(int);
-    virtual bool setProperty(int, double) { return false; }
+    virtual bool setProperty(int, double);
     virtual bool grabFrame();
     virtual IplImage* retrieveFrame(int);
     virtual int getCaptureDomain() { return CV_CAP_TRACE; } // Return the type of the capture object: CV_CAP_VFW, etc...
@@ -25,20 +37,6 @@ public:
 protected:
     void init();
 
-    int frame_w = 1024;
-    int frame_h = 576;
-    int frame_d = 2;
-
-private:
-    volatile void *pMemVirtAddressMapped;
-    int sizeMapped;
-    volatile void *pMemVirtAddressBuffer;
-    int frameSize;
-    FILE *pCaptureBufferPhysicalAddressFile;
-    fd devMemFd;
-    uint32_t physAddress;
-
-    // Cache converted frame
     struct frameInternal
     {
         IplImage *retrieveFrame()
@@ -51,8 +49,18 @@ private:
         cv::Mat matFrame;
     private:
         IplImage iplFrame;
-    }
+    };
 
+private:
+    void *pMemVirtAddressMapped;
+    int sizeMapped;
+    void *pMemVirtAddressBuffer;
+    int frameSize;
+    FILE *pCaptureBufferPhysicalAddressFile;
+    int devMemFd;
+    uint32_t physAddress;
+
+    // Cache converted frame
     frameInternal frameBgr;
     
 };
@@ -64,7 +72,7 @@ void CvCaptureCAM_Trace::init()
     sizeMapped = 0;
     pMemVirtAddressBuffer = NULL;
     frameSize = 0;
-    pCaptureBufferPhysicalFile = NULL;
+    pCaptureBufferPhysicalAddressFile = NULL;
     devMemFd = -1;
     physAddress = 0;;
 }
@@ -75,7 +83,7 @@ bool CvCaptureCAM_Trace::open( int index )
 
     close();
 
-    frameSize = frame_w * frame_h * frame_d;
+    frameSize = FRAME_SIZE;
 
     // There is only one camera
     if (index) {
@@ -83,12 +91,12 @@ bool CvCaptureCAM_Trace::open( int index )
     }
 
     // Open file with physical address (updated each frame)
-    pCaptureBufferPhysicalFile = fopen(PATH_PHYSICAL_ADDRESS, "rb");
-    if (NULL == pCaptureBufferPhysicalFile) {
+    pCaptureBufferPhysicalAddressFile = fopen(PATH_PHYSICAL_ADDRESS, "rb");
+    if (NULL == pCaptureBufferPhysicalAddressFile) {
         return false;
     }
 
-    devMemFd = open(PATH_DEV_MEM, O_RDWR|O_SYNC);
+    devMemFd = ::open(PATH_DEV_MEM, O_RDWR|O_SYNC);
     if (devMemFd < 0) {
         return false;
     }
@@ -96,7 +104,7 @@ bool CvCaptureCAM_Trace::open( int index )
     return true;
 }
 
-void CvCaptureCAM_Trace::close( CvCaptureCAM_Trace* capture )
+void CvCaptureCAM_Trace::close()
 {
     // Unmap the buffer
     if (pMemVirtAddressMapped) {
@@ -107,7 +115,7 @@ void CvCaptureCAM_Trace::close( CvCaptureCAM_Trace* capture )
     fclose(pCaptureBufferPhysicalAddressFile);
 
     // Close /dev/mem
-    close(devMemFd);
+    ::close(devMemFd);
 
     pMemVirtAddressMapped = NULL;
     sizeMapped = 0;
@@ -140,13 +148,15 @@ bool CvCaptureCAM_Trace::grabFrame()
         // unmap existing buffer
         munmap((void *)pMemVirtAddressMapped, sizeMapped);
 
-        pageOffset = physAddress & MMAP_MEM_PAGEALIGN;
-        pageAlignedAddress = physAddr - pageOffset;
+        pageOffset = physAddress & getpagesize();
+        pageAlignedAddress = physAddress - pageOffset;
         sizeMapped = frameSize + pageOffset;
 
         pMemVirtAddressMapped = mmap(
             (void *)pageAlignedAddress,
             (size_t)sizeMapped,
+            PROT_READ,
+            MAP_SHARED,
             (int)devMemFd,
             (off_t)pageAlignedAddress
         );
@@ -156,7 +166,7 @@ bool CvCaptureCAM_Trace::grabFrame()
             return false;
         }
 
-        pMemVirtualAddressBuffer = (int)((int)pMemVirtAddressMapped + pageOffset);
+        pMemVirtAddressBuffer = (void *)((int)pMemVirtAddressMapped + pageOffset);
         return true;
     }
     
@@ -167,11 +177,11 @@ bool CvCaptureCAM_Trace::grabFrame()
 IplImage* CvCaptureCAM_Trace::retrieveFrame(int)
 {
     // Convert from 16-bit YUYV to BGR24
-    if (pMemVirtualAddressBuffer) {
+    if (pMemVirtAddressBuffer) {
         // Create matrix container for raw frame buffer
-        cv::Mat matYuvColor = cv:Mat(frame_h, frame_w, CV_8UC2, pMemVirtualAddressBuffer);
+        cv::Mat matYuvColor = cv::Mat(FRAME_H, FRAME_W, CV_8UC2, pMemVirtAddressBuffer);
         // Perform the colorspace conversion
-        cvtColor(matYuvColor, frameBgr.matFrame.res, CV_YUV2BGR_YUYV);
+        cv::cvtColor(matYuvColor, frameBgr.matFrame, CV_YUV2BGR_YUYV);
 
         return frameBgr.retrieveFrame();
     } else {
@@ -184,9 +194,9 @@ double CvCaptureCAM_Trace::getProperty( int property_id )
     switch( property_id )
     {
     case CV_CAP_PROP_FRAME_WIDTH:
-        return frame_w;
+        return FRAME_W;
     case CV_CAP_PROP_FRAME_HEIGHT:
-        return frame_h;
+        return FRAME_H;
     }
     return 0;
 }
