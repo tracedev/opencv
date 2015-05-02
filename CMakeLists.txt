@@ -931,7 +931,6 @@ if(DEFINED WITH_INTELPERC)
 endif(DEFINED WITH_INTELPERC)
 
 if(DEFINED WITH_TRACE)
-  set(HAVE_TRACE "YES")
   status("    Trace:"     HAVE_TRACE      THEN "YES"                                 ELSE NO)
 endif(DEFINED WITH_TRACE)
 

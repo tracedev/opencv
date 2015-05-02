@@ -255,3 +255,8 @@ endif()
 if(WITH_INTELPERC)
   include("${OpenCV_SOURCE_DIR}/cmake/OpenCVFindIntelPerCSDK.cmake")
 endif(WITH_INTELPERC)
+
+# --- Trace Systems --
+if(WITH_TRACE)
+  set(HAVE_TRACE YES)
+endif()
