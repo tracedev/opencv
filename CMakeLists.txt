@@ -165,7 +165,7 @@ OCV_OPTION(WITH_OPENCL         "Include OpenCL Runtime support"              ON 
 OCV_OPTION(WITH_OPENCLAMDFFT   "Include AMD OpenCL FFT library support"      ON   IF (NOT ANDROID AND NOT IOS) )
 OCV_OPTION(WITH_OPENCLAMDBLAS  "Include AMD OpenCL BLAS library support"     ON   IF (NOT ANDROID AND NOT IOS) )
 OCV_OPTION(WITH_INTELPERC      "Include Intel Perceptual Computing support"  OFF  IF WIN32 )
-OCV_OPTION(WITH_TRACE          "Include Trace Systems support "  OFF  IF WIN32 )
+OCV_OPTION(WITH_TRACE          "Include Trace Systems support "              OFF )
 
 # OpenCV build components
 # ===================================================
