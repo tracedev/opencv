@@ -17,6 +17,9 @@
 
 #define FRAME_SIZE (FRAME_W * FRAME_H * FRAME_D)
 
+// define COPY_ON_GRAB to immediately create a copy of the YUV frame before the
+// later color space conversion in retrieve(). If the buffer isn't stable 
+// for the interval between a grab and retrieve this is necessary
 #define COPY_ON_GRAB
 
 // Capture video frames from Trace video camera
