@@ -81,14 +81,14 @@ void CvCaptureCAM_Trace::init()
 bool CvCaptureCAM_Trace::open( int index )
 {
 
-    close();
-
-    frameSize = FRAME_SIZE;
-
     // There is only one camera
     if (index) {
         return false;
     }
+
+    close();
+
+    frameSize = FRAME_SIZE;
 
     // Open file with physical address (updated each frame)
     pCaptureBufferPhysicalAddressFile = fopen(PATH_PHYSICAL_ADDRESS, "rb");
@@ -112,10 +112,14 @@ void CvCaptureCAM_Trace::close()
     }
 
     // Close /dev/shm/camera_buffer_pa
-    fclose(pCaptureBufferPhysicalAddressFile);
+    if (pCaptureBufferPhysicalAddressFile) {
+        fclose(pCaptureBufferPhysicalAddressFile);
+    }
 
     // Close /dev/mem
-    ::close(devMemFd);
+    if (devMemFd >= 0) {
+        ::close(devMemFd);
+    }
 
     pMemVirtAddressMapped = NULL;
     sizeMapped = 0;
@@ -123,7 +127,7 @@ void CvCaptureCAM_Trace::close()
     frameSize = 0;
     pCaptureBufferPhysicalAddressFile = NULL;
     devMemFd = -1;
-    physAddress = 0;;
+    physAddress = 0;
 
 }
 
