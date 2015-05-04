@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <sys/time.h>
 
 // For cvtColor
 #include "opencv2/imgproc/imgproc.hpp"
@@ -64,6 +65,11 @@ private:
     FILE *pCaptureBufferPhysicalAddressFile;
     int devMemFd;
     uint32_t physAddress;
+
+    // Frame counters and timestamp
+    int frameNumber;
+    struct timeval tsBegin;
+    struct timeval tsCurrent;
  
     // Cache converted frame
 #ifdef COPY_ON_GRAB
@@ -72,7 +78,6 @@ private:
     frameInternal frameBgr;
     
 };
-
 
 void CvCaptureCAM_Trace::init()
 {
@@ -124,6 +129,9 @@ bool CvCaptureCAM_Trace::open( int index )
         return false;
     }
 #endif
+
+    frameNumber = 0;
+    gettimeofday(&tsBegin, NULL); 
 
     return true;
 }
@@ -220,12 +228,14 @@ bool CvCaptureCAM_Trace::grabFrame()
         memcpy(pBufferYuv, pMemVirtAddressBuffer, frameSize);
 #endif
 
+        gettimeofday(&tsCurrent, NULL); 
+        frameNumber++;
+
         return true;
     }
     
     return false;
 }
-
 
 IplImage* CvCaptureCAM_Trace::retrieveFrame(int)
 {
@@ -252,10 +262,24 @@ double CvCaptureCAM_Trace::getProperty( int property_id )
 {
     switch( property_id )
     {
+    case CV_CAP_PROP_POS_MSEC:
+        if (0 == frameNumber) {
+            return 0;
+        } else {
+            struct timeval tsElapsed;
+            timersub(&tsCurrent, &tsBegin, &tsElapsed);
+            return 1000 * tsElapsed.tv_sec + ((double) tsElapsed.tv_usec) / 1000;
+        }
+        break;
+    case CV_CAP_PROP_POS_FRAMES:
+        return frameNumber;
+        break;
     case CV_CAP_PROP_FRAME_WIDTH:
         return FRAME_W;
+        break;
     case CV_CAP_PROP_FRAME_HEIGHT:
         return FRAME_H;
+        break;
     }
     return 0;
 }
