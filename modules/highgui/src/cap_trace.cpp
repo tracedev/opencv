@@ -12,12 +12,6 @@
 #define PATH_PHYSICAL_ADDRESS "/dev/shm/camera_buffer_pa"
 #define PATH_DEV_MEM "/dev/mem"
 
-#define FRAME_W (1024)
-#define FRAME_H (576)
-#define FRAME_D (2)
-
-#define FRAME_SIZE (FRAME_W * FRAME_H * FRAME_D)
-
 // define COPY_ON_GRAB to immediately create a copy of the YUV frame before the
 // later color space conversion in retrieve(). If the buffer isn't stable 
 // for the interval between a grab and retrieve this is necessary
@@ -62,6 +56,7 @@ private:
     int sizeMapped;
     void *pMemVirtAddressBuffer;
     int frameSize;
+    int frameWidth, frameHeight, frameDepth;
     FILE *pCaptureBufferPhysicalAddressFile;
     int devMemFd;
     uint32_t physAddress;
@@ -88,6 +83,9 @@ void CvCaptureCAM_Trace::init()
     pCaptureBufferPhysicalAddressFile = NULL;
     devMemFd = -1;
     physAddress = 0;;
+#ifdef COPY_ON_GRAB
+    pBufferYuv = NULL;
+#endif
 }
 
 // Initialize camera input
@@ -101,14 +99,24 @@ bool CvCaptureCAM_Trace::open( int index )
 
     close();
 
-    // RCB TODO, once available in the physical address file, extract
-    // the frame size here
-    frameSize = FRAME_SIZE;
-
     // Open file with physical address (updated each frame)
-    pCaptureBufferPhysicalAddressFile = fopen(PATH_PHYSICAL_ADDRESS, "rb");
+    // Fail if this doesn't exist, we assume it will be available at startup
+    pCaptureBufferPhysicalAddressFile = fopen(PATH_PHYSICAL_ADDRESS, "r");
     if (NULL == pCaptureBufferPhysicalAddressFile) {
         return false;
+    }
+
+    // Read a first frame buffer address to get the size
+    fseek(pCaptureBufferPhysicalAddressFile, 0, SEEK_SET);
+    fflush(pCaptureBufferPhysicalAddressFile);
+    uint32_t discard;
+    int paramsFound = fscanf(pCaptureBufferPhysicalAddressFile, "%08x %d %d %d",
+        &discard,
+        &frameWidth,
+        &frameHeight,
+        &frameDepth);
+    if (4 == paramsFound) {
+        frameSize = frameWidth * frameHeight * frameDepth;
     }
 
     devMemFd = ::open(PATH_DEV_MEM, O_RDWR|O_SYNC);
@@ -120,13 +128,15 @@ bool CvCaptureCAM_Trace::open( int index )
 
 #ifdef COPY_ON_GRAB
     // Allocate a temporary YUV copy buffer
-    pBufferYuv = (uint8_t *)malloc(frameSize);
-    if (NULL == pBufferYuv) {
-        fclose(pCaptureBufferPhysicalAddressFile);
-        pCaptureBufferPhysicalAddressFile = 0;
-        ::close(devMemFd);
-        devMemFd = -1;
-        return false;
+    if (frameSize) {
+        pBufferYuv = (uint8_t *)malloc(frameSize);
+        if (NULL == pBufferYuv) {
+            fclose(pCaptureBufferPhysicalAddressFile);
+            pCaptureBufferPhysicalAddressFile = 0;
+            ::close(devMemFd);
+            devMemFd = -1;
+            return false;
+        }
     }
 #endif
 
@@ -176,32 +186,51 @@ bool CvCaptureCAM_Trace::grabFrame()
 
     uint32_t pageAlignedAddress;
     off_t pageOffset;
-    size_t bytesRead;
+    int frameSizeNew;
 
     if (pCaptureBufferPhysicalAddressFile) {
-
-        fflush(pCaptureBufferPhysicalAddressFile);
+ 
+        // Format is "buffer_pa width height byte_depth format timestamp"
+        // e.g. "bb1c3600 1024 576 2 YUYV422I_YUYV 1234"
+        // multiply width*height*byte_depth to get buffer size
         fseek(pCaptureBufferPhysicalAddressFile, 0, SEEK_SET);
-        bytesRead = fread(&physAddress, 1, sizeof(int), pCaptureBufferPhysicalAddressFile);
+        fflush(pCaptureBufferPhysicalAddressFile);
+        int paramsFound = fscanf(pCaptureBufferPhysicalAddressFile, "%08x %d %d %d",
+            &physAddress,
+            &frameWidth,
+            &frameHeight,
+            &frameDepth);
 
-        if (sizeof(int) != bytesRead) {
+        printf("Got pa=%08x, width=%d, height=%d, depth=%d\n", physAddress, frameWidth, frameHeight, frameDepth);
+
+        if (paramsFound != 4) {
             return false;
         }
+
+        frameSizeNew = frameWidth * frameHeight * frameDepth;
+
+#ifdef COPY_ON_GRAB
+        // If the frame size changed we need to reallocate our buffer
+        if (frameSizeNew != frameSize) {
+            if (frameSize) {
+                pBufferYuv = (uint8_t *)realloc(pBufferYuv, frameSize);
+                if (NULL == pBufferYuv) {
+                    return false;
+                }
+            }
+        }
+#endif
+
+        frameSize = frameSizeNew;
 
         // unmap existing buffer
         if (pMemVirtAddressMapped) {
             munmap((void *)pMemVirtAddressMapped, sizeMapped);
         }
 
-	//printf("physAddress=%08x\n", physAddress);
-
         pageOffset = physAddress & (getpagesize()-1);
-	//printf("pageSize=%08x\n", getpagesize());
-	//printf("pageOffset=%08x\n", (int)pageOffset);
         pageAlignedAddress = physAddress - pageOffset;
-	//printf("pageAlignedAddres=%08x\n", pageAlignedAddress);
         sizeMapped = frameSize + pageOffset;
-	//printf("size=%d, sizeMapped=%d\n", frameSize, sizeMapped);
 
         pMemVirtAddressMapped = mmap(
             (void *)pageAlignedAddress,
@@ -211,7 +240,6 @@ bool CvCaptureCAM_Trace::grabFrame()
             (int)devMemFd,
             (off_t)pageAlignedAddress
         );
-	//printf("pMemVirtAddressMapped=%p\n", pMemVirtAddressMapped);
 
         if (NULL == pMemVirtAddressMapped) {
             sizeMapped = 0;
@@ -220,7 +248,6 @@ bool CvCaptureCAM_Trace::grabFrame()
         }
 
         pMemVirtAddressBuffer = (void *)((int)pMemVirtAddressMapped + pageOffset);
-	//printf("pMemVirtAddressBuffer=%p\n", pMemVirtAddressBuffer);
 
 #ifdef COPY_ON_GRAB
         // Copy entire YUV frame here, in practice the frame buffers update
@@ -243,11 +270,9 @@ IplImage* CvCaptureCAM_Trace::retrieveFrame(int)
     if (pMemVirtAddressBuffer) {
         // Create matrix container for raw frame buffer
 #ifdef COPY_ON_GRAB
-	//printf("Converting color of cached YUV frame %p", pBufferYuv);
-        cv::Mat matYuvColor = cv::Mat(FRAME_H, FRAME_W, CV_8UC2, pBufferYuv);
+        cv::Mat matYuvColor = cv::Mat(frameHeight, frameWidth, CV_8UC2, pBufferYuv);
 #else
-	//printf("Converting color of pMemVirtAddressBuffer=%p\n", pMemVirtAddressBuffer);
-        cv::Mat matYuvColor = cv::Mat(FRAME_H, FRAME_W, CV_8UC2, pMemVirtAddressBuffer);
+        cv::Mat matYuvColor = cv::Mat(frameHeight, frameWidth, CV_8UC2, pMemVirtAddressBuffer);
 #endif
         // Perform the colorspace conversion
         cv::cvtColor(matYuvColor, frameBgr.matFrame, CV_YUV2BGR_YUYV);
@@ -275,10 +300,10 @@ double CvCaptureCAM_Trace::getProperty( int property_id )
         return frameNumber;
         break;
     case CV_CAP_PROP_FRAME_WIDTH:
-        return FRAME_W;
+        return frameWidth;
         break;
     case CV_CAP_PROP_FRAME_HEIGHT:
-        return FRAME_H;
+        return frameHeight;
         break;
     }
     return 0;
