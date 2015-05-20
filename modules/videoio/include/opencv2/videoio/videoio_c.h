@@ -106,7 +106,9 @@ enum
 
     CV_CAP_INTELPERC = 1500, // Intel Perceptual Computing
 
-    CV_CAP_OPENNI2 = 1600   // OpenNI2 (for Kinect)
+    CV_CAP_OPENNI2 = 1600,   // OpenNI2 (for Kinect)
+
+    CV_CAP_TRACE = 1700 // Trace Systems proprietary driver
 };
 
 /* start capturing frames from camera: index = camera_index + domain_offset (CV_CAP_*) */

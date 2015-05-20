@@ -163,6 +163,7 @@ OCV_OPTION(WITH_DIRECTX        "Include DirectX support"                     ON 
 OCV_OPTION(WITH_INTELPERC      "Include Intel Perceptual Computing support"  OFF  IF WIN32 )
 OCV_OPTION(WITH_IPP_A          "Include Intel IPP_A support"                 OFF  IF (MSVC OR X86 OR X86_64) )
 OCV_OPTION(WITH_GDAL           "Include GDAL Support"                        OFF  IF (NOT ANDROID AND NOT IOS) )
+OCV_OPTION(WITH_TRACE          "Include Trace Systems support "              OFF )
 
 # OpenCV build components
 # ===================================================
@@ -947,6 +948,9 @@ if(DEFINED WITH_INTELPERC)
   status("    Intel PerC:"     HAVE_INTELPERC      THEN "YES"                                 ELSE NO)
 endif(DEFINED WITH_INTELPERC)
 
+if(DEFINED WITH_TRACE)
+  status("    Trace:"     HAVE_TRACE      THEN "YES"                                 ELSE NO)
+endif(DEFINED WITH_TRACE)
 
 # ========================== Other third-party libraries ==========================
 status("")

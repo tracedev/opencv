@@ -94,6 +94,9 @@
 /* Intel Perceptual Computing SDK library */
 #cmakedefine HAVE_INTELPERC
 
+/* Trace Systems capture */
+#cmakedefine HAVE_TRACE
+
 /* Intel Integrated Performance Primitives */
 #cmakedefine HAVE_IPP
 #cmakedefine HAVE_IPP_ICV_ONLY

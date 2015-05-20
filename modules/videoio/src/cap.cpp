@@ -161,6 +161,9 @@ CV_IMPL CvCapture * cvCreateCameraCapture (int index)
 #ifdef HAVE_INTELPERC
         CV_CAP_INTELPERC,
 #endif
+#ifdef HAVE_TRACE
+        CV_CAP_TRACE,
+#endif
         -1
     };
 
@@ -199,6 +202,7 @@ CV_IMPL CvCapture * cvCreateCameraCapture (int index)
     defined(HAVE_ANDROID_NATIVE_CAMERA) || \
     defined(HAVE_GIGE_API) || \
     defined(HAVE_INTELPERC)    || \
+    defined(HAVE_TRACE)    || \
     (0)
         // local variable to memorize the captured device
         CvCapture *capture;
@@ -348,6 +352,15 @@ CV_IMPL CvCapture * cvCreateCameraCapture (int index)
                 return capture;
         break; // CV_CAP_GIGANETIX
 #endif
+
+#ifdef HAVE_TRACE
+        case CV_CAP_TRACE:
+            capture = cvCreateCameraCapture_Trace(index);
+            if (capture)
+                return capture;
+        break; // CV_CAP_TRACE
+#endif
+
         }
     }
 

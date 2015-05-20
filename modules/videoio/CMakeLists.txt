@@ -154,6 +154,10 @@ if(HAVE_INTELPERC)
   list(APPEND VIDEOIO_LIBRARIES ${INTELPERC_LIBRARIES})
 endif(HAVE_INTELPERC)
 
+if(HAVE_TRACE)
+  list(APPEND videoio_srcs src/cap_trace.cpp)
+endif(HAVE_TRACE)
+
 if(IOS)
   add_definitions(-DHAVE_IOS=1)
   list(APPEND videoio_srcs
