@@ -156,6 +156,9 @@ endif(HAVE_INTELPERC)
 
 if(HAVE_TRACE)
   list(APPEND videoio_srcs src/cap_trace.cpp)
+  ocv_include_directories(../../../../libyuv/libyuvSrc/include)
+  link_directories(../../../../libyuv/libyuvBuild)
+  list(APPEND VIDEOIO_LIBRARIES yuv)
 endif(HAVE_TRACE)
 
 if(IOS)
@@ -190,6 +193,8 @@ ocv_set_module_sources(HEADERS ${videoio_ext_hdrs} SOURCES ${videoio_srcs} ${vid
 ocv_module_include_directories()
 
 ocv_create_module(${VIDEOIO_LIBRARIES})
+#set(OPENCV_MODULE_${the_module}_LINK_DEPS "${OPENCV_MODULE_${the_module}_LINK_DEPS};${ARGN}" CACHE INTERNAL "")
+
 
 macro(ocv_videoio_configure_target)
 if(APPLE)

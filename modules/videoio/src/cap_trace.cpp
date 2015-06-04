@@ -6,8 +6,14 @@
 #include <sys/mman.h>
 #include <sys/time.h>
 
+#define LIBYUV
+
+#ifdef LIBYUV
+#include "libyuv.h"
+#else
 // For cvtColor
 #include "opencv2/imgproc.hpp"
+#endif
 
 #define PATH_PHYSICAL_ADDRESS "/dev/shm/camera_buffer_pa"
 #define PATH_DEV_MEM "/dev/mem"
@@ -70,6 +76,9 @@ class CvCaptureCAM_Trace : public CvCapture
 #ifdef COPY_ON_GRAB
         uint8_t *pBufferYuv;
 #endif
+#ifdef LIBYUV
+        uint8_t *pBufferARGB;
+#endif
         frameInternal frameBgr;
 
 };
@@ -85,6 +94,9 @@ void CvCaptureCAM_Trace::init()
     physAddress = 0;;
 #ifdef COPY_ON_GRAB
     pBufferYuv = NULL;
+#endif
+#ifdef LIBYUV
+    pBufferARGB = NULL;
 #endif
 }
 
@@ -139,6 +151,19 @@ bool CvCaptureCAM_Trace::open( int index )
         }
     }
 #endif
+#ifdef LIBYUV
+    // Allocate a temporary ARGB buffer
+    if (frameSize) {
+        pBufferARGB = (uint8_t *)malloc(frameWidth*frameHeight*4);
+        if (NULL == pBufferARGB) {
+            fclose(pCaptureBufferPhysicalAddressFile);
+            pCaptureBufferPhysicalAddressFile = 0;
+            ::close(devMemFd);
+            devMemFd = -1;
+            return false;
+        }
+    }
+#endif
 
     frameNumber = 0;
     gettimeofday(&tsBegin, NULL); 
@@ -170,6 +195,12 @@ void CvCaptureCAM_Trace::close()
     if (pBufferYuv) {
         free(pBufferYuv);
         pBufferYuv = NULL;
+    }
+#endif
+#ifdef LIBYUV
+    if (pBufferARGB) {
+        free(pBufferARGB);
+        pBufferARGB = NULL;
     }
 #endif
 
@@ -215,6 +246,17 @@ bool CvCaptureCAM_Trace::grabFrame()
             if (frameSize) {
                 pBufferYuv = (uint8_t *)realloc(pBufferYuv, frameSize);
                 if (NULL == pBufferYuv) {
+                    return false;
+                }
+            }
+        }
+#endif
+#ifdef LIBYUV
+        // If the frame size changed we need to reallocate our buffer
+        if (frameSizeNew != frameSize) {
+            if (frameSize) {
+                pBufferARGB = (uint8_t *)realloc(pBufferARGB, frameWidth*frameHeight*4);
+                if (NULL == pBufferARGB) {
                     return false;
                 }
             }
@@ -269,6 +311,12 @@ IplImage* CvCaptureCAM_Trace::retrieveFrame(int)
     // Convert from 16-bit YUYV to BGR24
     if (pMemVirtAddressBuffer) {
         // Create matrix container for raw frame buffer
+#if 0
+        struct timeval tsStart, tsEnd, tsElap;
+        gettimeofday(&tsStart, NULL); 
+#endif
+
+#ifndef LIBYUV
 #ifdef COPY_ON_GRAB
         cv::Mat matYuvColor = cv::Mat(frameHeight, frameWidth, CV_8UC2, pBufferYuv);
 #else
@@ -276,6 +324,20 @@ IplImage* CvCaptureCAM_Trace::retrieveFrame(int)
 #endif
         // Perform the colorspace conversion
         cv::cvtColor(matYuvColor, frameBgr.matFrame, CV_YUV2BGR_YUYV);
+#else
+#ifdef COPY_ON_GRAB
+        libyuv::YUY2ToARGB(pBufferYuv, frameWidth*frameDepth, pBufferARGB, frameWidth*4, frameWidth, frameHeight);
+#else
+        libyuv::YUY2ToARGB(pMemVirtAddressBuffer, 0, pBufferARGB, 0, frameWidth, frameHeight);
+#endif
+        frameBgr.matFrame = cv::Mat(frameHeight, frameWidth, CV_8UC4, (void*)pBufferARGB); 
+#endif
+
+#if 0
+        gettimeofday(&tsEnd, NULL); 
+        timersub(&tsEnd, &tsStart, &tsElap);
+        printf("Conversion took %f ms\n", 1000 * tsElap.tv_sec + ((double) tsElap.tv_usec) / 1000);
+#endif
 
         return frameBgr.retrieveFrame();
     } else {
