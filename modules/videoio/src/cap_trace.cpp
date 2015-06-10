@@ -232,7 +232,7 @@ bool CvCaptureCAM_Trace::grabFrame()
                 &frameHeight,
                 &frameDepth);
 
-        printf("Got pa=%08x, width=%d, height=%d, depth=%d\n", physAddress, frameWidth, frameHeight, frameDepth);
+        //printf("Got pa=%08x, width=%d, height=%d, depth=%d\n", physAddress, frameWidth, frameHeight, frameDepth);
 
         if (paramsFound != 4) {
             return false;
