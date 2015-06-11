@@ -7,6 +7,7 @@
 #include <sys/time.h>
 
 #define LIBYUV
+#define TIMING_MEASUREMENTS
 
 #ifdef LIBYUV
 #include "libyuv.h"
@@ -310,12 +311,13 @@ IplImage* CvCaptureCAM_Trace::retrieveFrame(int)
 {
     // Convert from 16-bit YUYV to BGR24
     if (pMemVirtAddressBuffer) {
-        // Create matrix container for raw frame buffer
-#if 0
+
+#ifdef TIMING_MEASUREMENTS
         struct timeval tsStart, tsEnd, tsElap;
         gettimeofday(&tsStart, NULL); 
 #endif
 
+        // Create matrix container for raw frame buffer
 #ifndef LIBYUV
 #ifdef COPY_ON_GRAB
         cv::Mat matYuvColor = cv::Mat(frameHeight, frameWidth, CV_8UC2, pBufferYuv);
@@ -333,10 +335,10 @@ IplImage* CvCaptureCAM_Trace::retrieveFrame(int)
         frameBgr.matFrame = cv::Mat(frameHeight, frameWidth, CV_8UC4, (void*)pBufferARGB); 
 #endif
 
-#if 0
+#ifdef TIMING_MEASUREMENTS
         gettimeofday(&tsEnd, NULL); 
         timersub(&tsEnd, &tsStart, &tsElap);
-        printf("Conversion took %f ms\n", 1000 * tsElap.tv_sec + ((double) tsElap.tv_usec) / 1000);
+        printf("%f ms\n", 1000 * tsElap.tv_sec + ((double) tsElap.tv_usec) / 1000);
 #endif
 
         return frameBgr.retrieveFrame();
