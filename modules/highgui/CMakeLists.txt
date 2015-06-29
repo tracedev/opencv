@@ -94,6 +94,12 @@ source_group("Include" FILES ${highgui_ext_hdrs})
 ocv_set_module_sources(HEADERS ${highgui_ext_hdrs} SOURCES ${highgui_srcs} ${highgui_hdrs})
 ocv_module_include_directories()
 
+if(LIBYUV_FOUND)
+       ocv_include_directories(${LIBYUV_INCLUDE_DIRS})
+       link_directories(${LIBYUV_LINK_DIR})
+       list(APPEND HIGHGUI_LIBRARIES yuv)
+endif(LIBYUV_FOUND)
+
 ocv_create_module(${HIGHGUI_LIBRARIES})
 
 macro(ocv_highgui_configure_target)

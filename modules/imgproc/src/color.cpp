@@ -1,4 +1,4 @@
-/*M///////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////
 //
 //  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
 //
@@ -92,6 +92,10 @@
 #include "precomp.hpp"
 #include "opencl_kernels_imgproc.hpp"
 #include <limits>
+
+#ifdef WITH_LIBYUV
+#include "libyuv.h"
+#endif
 
 #define  CV_DESCALE(x,n)     (((x) + (1 << ((n)-1))) >> (n))
 
@@ -6705,6 +6709,17 @@ void cv::cvtColor( InputArray _src, OutputArray _dst, int code, int dcn )
                 _dst.create(sz, CV_8UC(dcn));
                 dst = _dst.getMat();
 
+#ifdef WITH_LIBYUV
+                if (dcn == 4) 
+                    libyuv::YUY2ToARGB(src.data, src.cols*scn, dst.data, src.cols*dcn, src.cols, src.rows);
+                else 
+                {
+                    int size = src.rows*src.cols*dcn;
+                    uint8 temp[size];
+                    libyuv::YUY2ToARGB(src.data, src.cols*scn, temp, src.cols*4, src.cols, src.rows);
+                    libyuv::ARGBToRGB24(temp, src.cols*4, dst.data, src.cols*dcn, src.cols, src.rows);
+                }
+#else
                 switch(dcn*1000 + bIdx*100 + uIdx*10 + ycn)
                 {
                     case 3000: cvtYUV422toRGB<0,0,0>(dst, (int)src.step, src.ptr<uchar>()); break;
@@ -6725,6 +6740,7 @@ void cv::cvtColor( InputArray _src, OutputArray _dst, int code, int dcn )
                     case 4211: cvtYUV422toRGBA<2,1,1>(dst, (int)src.step, src.ptr<uchar>()); break;
                     default: CV_Error( CV_StsBadFlag, "Unknown/unsupported color conversion code" ); break;
                 };
+#endif
             }
             break;
         case CV_YUV2GRAY_UYVY: case CV_YUV2GRAY_YUY2:

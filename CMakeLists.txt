@@ -16,6 +16,8 @@ else()
   cmake_minimum_required(VERSION "${MIN_VER_CMAKE}" FATAL_ERROR)
 endif()
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
+
 # Following block can broke build in case of cross-compilng
 # but CMAKE_CROSSCOMPILING variable will be set only on project(OpenCV) command
 # so we will try to detect crosscompiling by presense of CMAKE_TOOLCHAIN_FILE
@@ -410,6 +412,14 @@ endif(WIN32 AND NOT MINGW)
 # ----------------------------------------------------------------------------
 if(UNIX)
   find_package(PkgConfig QUIET)
+
+  if(WITH_LIBYUV)
+    find_package(LibYuv)
+    if(LIBYUV_FOUND)
+      add_definitions(-DWITH_LIBYUV)
+    endif(LIBYUV_FOUND)
+  endif(WITH_LIBYUV)
+
   include(CheckFunctionExists)
   include(CheckIncludeFile)
 
@@ -869,6 +879,14 @@ if(DEFINED WITH_FFMPEG)
   status("      swscale:"      HAVE_FFMPEG_SWSCALE THEN "YES (ver ${ALIASOF_libswscale_VERSION})"  ELSE NO)
   status("      gentoo-style:" HAVE_GENTOO_FFMPEG  THEN YES                                        ELSE NO)
 endif(DEFINED WITH_FFMPEG)
+
+if(DEFINED WITH_LIBYUV)
+  if(UNIX)
+    status("    LIBYUV:"       LIBYUV_FOUND         THEN YES ELSE NO)
+  else()
+    status("    LIBYUV:"       NO)
+  endif()
+endif(DEFINED WITH_LIBYUV)
 
 if(DEFINED WITH_GSTREAMER)
   status("    GStreamer:"      HAVE_GSTREAMER      THEN ""                                         ELSE NO)

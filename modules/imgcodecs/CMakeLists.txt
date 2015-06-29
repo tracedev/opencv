@@ -102,6 +102,12 @@ source_group("Include" FILES ${imgcodecs_ext_hdrs})
 ocv_set_module_sources(HEADERS ${imgcodecs_ext_hdrs} SOURCES ${imgcodecs_srcs} ${imgcodecs_hdrs} ${grfmt_srcs} ${grfmt_hdrs})
 ocv_module_include_directories()
 
+if(LIBYUV_FOUND)
+       ocv_include_directories(${LIBYUV_INCLUDE_DIRS})
+       link_directories(${LIBYUV_LINK_DIR})
+       list(APPEND IMGCODECS_LIBRARIES yuv)
+endif(LIBYUV_FOUND)
+
 ocv_create_module(${GRFMT_LIBS} ${IMGCODECS_LIBRARIES})
 
 macro(ocv_imgcodecs_configure_target)

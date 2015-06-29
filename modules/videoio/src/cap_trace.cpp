@@ -6,15 +6,10 @@
 #include <sys/mman.h>
 #include <sys/time.h>
 
-#define LIBYUV
 #define TIMING_MEASUREMENTS
 
-#ifdef LIBYUV
-#include "libyuv.h"
-#else
 // For cvtColor
 #include "opencv2/imgproc.hpp"
-#endif
 
 #define PATH_PHYSICAL_ADDRESS "/dev/shm/camera_buffer_pa"
 #define PATH_DEV_MEM "/dev/mem"
@@ -63,6 +58,7 @@ class CvCaptureCAM_Trace : public CvCapture
         int sizeMapped;
         void *pMemVirtAddressBuffer;
         int frameSize;
+        int fourcc;
         int frameWidth, frameHeight, frameDepth;
         FILE *pCaptureBufferPhysicalAddressFile;
         int devMemFd;
@@ -77,10 +73,7 @@ class CvCaptureCAM_Trace : public CvCapture
 #ifdef COPY_ON_GRAB
         uint8_t *pBufferYuv;
 #endif
-#ifdef LIBYUV
-        uint8_t *pBufferARGB;
-#endif
-        frameInternal frameBgr;
+        frameInternal returnFrame;
 
 };
 
@@ -93,18 +86,15 @@ void CvCaptureCAM_Trace::init()
     pCaptureBufferPhysicalAddressFile = NULL;
     devMemFd = -1;
     physAddress = 0;;
+    fourcc =  CV_FOURCC_MACRO('A', 'R', 'G', 'B');
 #ifdef COPY_ON_GRAB
     pBufferYuv = NULL;
-#endif
-#ifdef LIBYUV
-    pBufferARGB = NULL;
 #endif
 }
 
 // Initialize camera input
 bool CvCaptureCAM_Trace::open( int index )
 {
-
     // There is only one camera
     if (index) {
         return false;
@@ -152,19 +142,6 @@ bool CvCaptureCAM_Trace::open( int index )
         }
     }
 #endif
-#ifdef LIBYUV
-    // Allocate a temporary ARGB buffer
-    if (frameSize) {
-        pBufferARGB = (uint8_t *)malloc(frameWidth*frameHeight*4);
-        if (NULL == pBufferARGB) {
-            fclose(pCaptureBufferPhysicalAddressFile);
-            pCaptureBufferPhysicalAddressFile = 0;
-            ::close(devMemFd);
-            devMemFd = -1;
-            return false;
-        }
-    }
-#endif
 
     frameNumber = 0;
     gettimeofday(&tsBegin, NULL); 
@@ -196,12 +173,6 @@ void CvCaptureCAM_Trace::close()
     if (pBufferYuv) {
         free(pBufferYuv);
         pBufferYuv = NULL;
-    }
-#endif
-#ifdef LIBYUV
-    if (pBufferARGB) {
-        free(pBufferARGB);
-        pBufferARGB = NULL;
     }
 #endif
 
@@ -247,17 +218,6 @@ bool CvCaptureCAM_Trace::grabFrame()
             if (frameSize) {
                 pBufferYuv = (uint8_t *)realloc(pBufferYuv, frameSize);
                 if (NULL == pBufferYuv) {
-                    return false;
-                }
-            }
-        }
-#endif
-#ifdef LIBYUV
-        // If the frame size changed we need to reallocate our buffer
-        if (frameSizeNew != frameSize) {
-            if (frameSize) {
-                pBufferARGB = (uint8_t *)realloc(pBufferARGB, frameWidth*frameHeight*4);
-                if (NULL == pBufferARGB) {
                     return false;
                 }
             }
@@ -318,22 +278,28 @@ IplImage* CvCaptureCAM_Trace::retrieveFrame(int)
 #endif
 
         // Create matrix container for raw frame buffer
-#ifndef LIBYUV
 #ifdef COPY_ON_GRAB
         cv::Mat matYuvColor = cv::Mat(frameHeight, frameWidth, CV_8UC2, pBufferYuv);
 #else
         cv::Mat matYuvColor = cv::Mat(frameHeight, frameWidth, CV_8UC2, pMemVirtAddressBuffer);
 #endif
+
         // Perform the colorspace conversion
-        cv::cvtColor(matYuvColor, frameBgr.matFrame, CV_YUV2BGR_YUYV);
-#else
-#ifdef COPY_ON_GRAB
-        libyuv::YUY2ToARGB(pBufferYuv, frameWidth*frameDepth, pBufferARGB, frameWidth*4, frameWidth, frameHeight);
-#else
-        libyuv::YUY2ToARGB(pMemVirtAddressBuffer, 0, pBufferARGB, 0, frameWidth, frameHeight);
-#endif
-        frameBgr.matFrame = cv::Mat(frameHeight, frameWidth, CV_8UC4, (void*)pBufferARGB); 
-#endif
+        switch (fourcc)
+        {
+            case CV_FOURCC_MACRO('Y', 'U', 'Y', '2'):
+                returnFrame.matFrame = matYuvColor;
+                break;
+            case CV_FOURCC_MACRO('A', 'R', 'G', 'B'):
+                cv::cvtColor(matYuvColor, returnFrame.matFrame, CV_YUV2BGRA_YUY2);
+                break;
+            case CV_FOURCC_MACRO('2', '4', 'B', 'G'):
+                cv::cvtColor(matYuvColor, returnFrame.matFrame, CV_YUV2BGR_YUY2);
+                break;
+            case CV_FOURCC_MACRO('G', 'R', 'A', 'Y'):
+                cv::cvtColor(matYuvColor, returnFrame.matFrame, CV_YUV2GRAY_YUY2);
+                break;
+        }
 
 #ifdef TIMING_MEASUREMENTS
         gettimeofday(&tsEnd, NULL); 
@@ -341,7 +307,7 @@ IplImage* CvCaptureCAM_Trace::retrieveFrame(int)
         printf("%f ms\n", 1000 * tsElap.tv_sec + ((double) tsElap.tv_usec) / 1000);
 #endif
 
-        return frameBgr.retrieveFrame();
+        return returnFrame.retrieveFrame();
     } else {
         return NULL;
     }
@@ -369,12 +335,33 @@ double CvCaptureCAM_Trace::getProperty( int property_id )
         case CV_CAP_PROP_FRAME_HEIGHT:
             return frameHeight;
             break;
+        case CV_CAP_PROP_FOURCC:
+            return fourcc;
+            break;
     }
     return 0;
 }
 
-bool CvCaptureCAM_Trace::setProperty( int, double )
+bool CvCaptureCAM_Trace::setProperty( int property_id, double property_value)
 {
+    int numSupportedFourcc = 4;
+    int supportedFourcc[] = { CV_FOURCC_MACRO('Y', 'U', 'Y', '2'),
+        CV_FOURCC_MACRO('A', 'R', 'G', 'B'),
+        CV_FOURCC_MACRO('2', '4', 'B', 'G'),
+        CV_FOURCC_MACRO('G', 'R', 'E', 'Y')
+     };
+    switch( property_id )
+    {
+        case CV_CAP_PROP_FOURCC:
+            for (int i = 0; i < numSupportedFourcc; i++)
+            {
+                if ((int)property_value == supportedFourcc[i]) {
+                    fourcc = (int) property_value;
+                    return true;
+                }
+            }
+            break;
+    }
     return false;
 }
 
