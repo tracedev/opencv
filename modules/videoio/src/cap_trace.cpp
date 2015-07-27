@@ -348,7 +348,7 @@ bool CvCaptureCAM_Trace::setProperty( int property_id, double property_value)
     int supportedFourcc[] = { CV_FOURCC_MACRO('Y', 'U', 'Y', '2'),
         CV_FOURCC_MACRO('A', 'R', 'G', 'B'),
         CV_FOURCC_MACRO('2', '4', 'B', 'G'),
-        CV_FOURCC_MACRO('G', 'R', 'E', 'Y')
+        CV_FOURCC_MACRO('G', 'R', 'A', 'Y')
      };
     switch( property_id )
     {
