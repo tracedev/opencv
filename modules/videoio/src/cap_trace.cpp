@@ -6,7 +6,7 @@
 #include <sys/mman.h>
 #include <sys/time.h>
 
-#define TIMING_MEASUREMENTS
+//#define TIMING_MEASUREMENTS
 
 // For cvtColor
 #include "opencv2/imgproc.hpp"
