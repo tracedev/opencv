@@ -1,5 +1,15 @@
 set(the_description "The Core Functionality")
-ocv_add_module(core PRIVATE_REQUIRED ${ZLIB_LIBRARIES} "${OPENCL_LIBRARIES}" OPTIONAL opencv_cudev)
+
+
+set(HAVE_FFTW ON)
+
+if(HAVE_FFTW)
+    set(FFTW_LIB "${OpenCV_SOURCE_DIR}/3rdparty/fftw/libfftw3f.a" )
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAVE_FFTW")
+endif()
+
+
+ocv_add_module(core PRIVATE_REQUIRED ${ZLIB_LIBRARIES} "${OPENCL_LIBRARIES}" "${FFTW_LIB}" OPTIONAL opencv_cudev)
 
 if(HAVE_WINRT_CX)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /ZW")
