@@ -45,6 +45,10 @@
 #include "opencl_kernels_core.hpp"
 #include <map>
 
+#ifdef HAVE_FFTW
+#include "fftw/fftw3-ocvext.h"
+#endif
+
 namespace cv
 {
 
@@ -2437,6 +2441,16 @@ void cv::dft( InputArray _src0, OutputArray _dst, int flags, int nonzero_rows )
 #ifdef HAVE_OPENCL
     CV_OCL_RUN(_dst.isUMat() && _src0.dims() <= 2,
                ocl_dft(_src0, _dst, flags, nonzero_rows))
+#endif
+
+#ifdef HAVE_FFTW
+	if (is_enabled_fftw_dft())
+	{
+		if (fftw_ProcessOCVdft( _src0, _dst, flags, nonzero_rows ))
+		{
+			return; 
+		}	
+	}
 #endif
 
     static DFTFunc dft_tbl[6] =
