@@ -1287,15 +1287,36 @@ struct RGB2Gray<float>
         int scn = srccn, i = 0;
         float cb = coeffs[0], cg = coeffs[1], cr = coeffs[2];
 
+		volatile bool b=true; // see note below -BFM
+        
         if (scn == 3)
         {
             for ( ; i <= n - 8; i += 8, src += scn * 8)
             {
-                float32x4x3_t v_src = vld3q_f32(src);
-                vst1q_f32(dst + i, vmlaq_f32(vmlaq_f32(vmulq_f32(v_src.val[0], v_cb), v_src.val[1], v_cg), v_src.val[2], v_cr));
+				// Note:
+				//
+				// The optimizing compiler was rearranging the four lines of code commented out below and causing a compile time error.
+				// To get around this, I wrapped them within a volatile boolean condition. There may be a better way, but this works. -BFM
+				
+                //float32x4x3_t v_src = vld3q_f32(src);
+   	            //vst1q_f32(dst + i, vmlaq_f32(vmlaq_f32(vmulq_f32(v_src.val[0], v_cb), v_src.val[1], v_cg), v_src.val[2], v_cr));
+				//
+   	            //v_src = vld3q_f32(src + scn * 4);
+   	            //vst1q_f32(dst + i + 4, vmlaq_f32(vmlaq_f32(vmulq_f32(v_src.val[0], v_cb), v_src.val[1], v_cg), v_src.val[2], v_cr));
 
-                v_src = vld3q_f32(src + scn * 4);
-                vst1q_f32(dst + i + 4, vmlaq_f32(vmlaq_f32(vmulq_f32(v_src.val[0], v_cb), v_src.val[1], v_cg), v_src.val[2], v_cr));
+
+				if (b) {
+
+	                float32x4x3_t v_src = vld3q_f32(src);
+    	            vst1q_f32(dst + i, vmlaq_f32(vmlaq_f32(vmulq_f32(v_src.val[0], v_cb), v_src.val[1], v_cg), v_src.val[2], v_cr));
+
+				} 
+				if (b) { 
+				
+					float32x4x3_t v_src = vld3q_f32(src + scn * 4);
+    	            vst1q_f32(dst + i + 4, vmlaq_f32(vmlaq_f32(vmulq_f32(v_src.val[0], v_cb), v_src.val[1], v_cg), v_src.val[2], v_cr));
+
+				}	
             }
 
             for ( ; i <= n - 4; i += 4, src += scn * 4)

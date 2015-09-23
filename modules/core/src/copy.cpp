@@ -114,7 +114,7 @@ copyMask_<uchar>(const uchar* _src, size_t sstep, const uchar* mask, size_t mste
              }
         }
         #elif CV_NEON
-        uint8x16_t v_zero = vdupq_n_u8(0);
+        volatile uint8x16_t v_zero = vdupq_n_u8(0);   // Made volatile so it compiles  -BFM
         for( ; x <= size.width - 16; x += 16 )
         {
             uint8x16_t v_mask = vcgtq_u8(vld1q_u8(mask + x), v_zero);
@@ -164,7 +164,7 @@ copyMask_<ushort>(const uchar* _src, size_t sstep, const uchar* mask, size_t mst
              }
         }
         #elif CV_NEON
-        uint8x8_t v_zero = vdup_n_u8(0);
+        volatile uint8x8_t v_zero = vdup_n_u8(0);	// Made volatile so it compiles -BFM
         for( ; x <= size.width - 8; x += 8 )
         {
             uint8x8_t v_mask = vcgt_u8(vld1_u8(mask + x), v_zero);

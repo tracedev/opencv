@@ -173,6 +173,9 @@ if(CMAKE_COMPILER_IS_GNUCXX)
 
   if(ENABLE_NEON)
     add_extra_compiler_option(-mfpu=neon)
+    add_extra_compiler_option(-march=armv7-a)
+    add_extra_compiler_option(-mfloat-abi=softfp)
+    add_extra_compiler_option(-D__ARM_NEON__)
   endif()
 
   # Profiling?
