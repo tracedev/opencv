@@ -1,7 +1,7 @@
 set(the_description "The Core Functionality")
 
 
-set(HAVE_FFTW ON)
+set(HAVE_FFTW OFF)
 
 if(HAVE_FFTW)
     set(FFTW_LIB "${OpenCV_SOURCE_DIR}/3rdparty/fftw/libfftw3f.a" )
