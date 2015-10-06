@@ -97,6 +97,10 @@
 #include "libyuv.h"
 #endif
 
+#ifdef WITH_TRACERCOMMON
+#include "tracercommon.h"
+#endif
+
 #define  CV_DESCALE(x,n)     (((x) + (1 << ((n)-1))) >> (n))
 
 #if defined (HAVE_IPP) && (IPP_VERSION_MAJOR >= 7)
@@ -4866,6 +4870,133 @@ struct mRGBA2RGBA
     }
 };
 
+
+
+///////////////////////////////////// YUV2 -> Y  /////////////////////////////////////
+
+#ifdef CV_NEON  
+
+void cvtYUY2toY_NEON( void * src, void * dst, int cnt  );		// Just to avoid 'no previous declaration' warning 
+
+void cvtYUY2toY_NEON( void * src, void * dst, int cnt  )
+{
+	uchar tmp=0;
+
+	asm volatile
+	(
+		// Loop extract 24 Y values at a time
+	
+		"1:						\n"
+		"cmp	%2, #24      	\n"
+		"blt	2f				\n"
+		"vld2.8 {d0,d1}, [%0]!  \n"
+		"vld2.8 {d2,d3}, [%0]!  \n"
+		"vld2.8 {d4,d5}, [%0]!  \n"
+		"vst1.8 d0, [%1]!   	\n"
+		"vst1.8 d2, [%1]!   	\n"
+		"vst1.8 d4, [%1]!   	\n"
+		"sub 	%2, %2, #24		\n"
+		"b		1b				\n"
+		"2:                     \n"
+
+		// Extract next 16 Y values (if available)
+	
+		"cmp	%2, #16      	\n"
+		"blt	3f				\n"
+		"vld2.8 {d0,d1}, [%0]!  \n"
+		"vld2.8 {d2,d3}, [%0]!  \n"
+		"vst1.8 d0, [%1]!   	\n"
+		"vst1.8 d2, [%1]!   	\n"
+		"sub 	%2, %2, #16		\n"
+		"3:                     \n"
+
+		// Extract next 8 Y values (if available)
+
+		"cmp	%2, #8      	\n"
+		"blt	4f				\n"
+		"vld2.8 {d0,d1}, [%0]!  \n"
+		"vst1.8 d0, [%1]!   	\n"
+		"sub 	%2, %2, #8		\n"
+		"4:                     \n"
+
+		// Loop extract remaining Y values one at a time (if any)
+
+		"5:		\n"
+		"cmp	%2, #1      	\n"
+		"blt	6f				\n"
+		"ldrh 	%3,[%0]!  		\n"
+		"strb 	%3,[%1]!   		\n"
+		"sub 	%2, %2, #1		\n"
+		"b		5b				\n"
+		"6:						\n"
+
+	  : "+r"(src),      // %0
+	  	"+r"(dst),     	// %1
+	  	"+r"(cnt),      // %2
+	  	"+r"(tmp)      	// %3
+
+	);
+}
+#endif
+
+void cvtYUY2toY( InputArray _src, OutputArray _dst );		// Just to avoid 'no previous declaration' warning 
+
+void cvtYUY2toY( InputArray _src, OutputArray _dst )
+{
+	// We already did this Verification before the call, but we do it again here anyway.
+	
+	int type  = _src.type();
+	int depth = CV_MAT_DEPTH(type);
+	int scn   = CV_MAT_CN(type);
+
+	CV_Assert( scn == 2 && depth == CV_8U );
+
+#ifdef CV_NEON    
+   	Mat src = _src.getMat();
+   	_dst.create(src.dims, &src.size[0], depth);
+   	Mat dst = _dst.getMat();
+
+	if (src.isContinuous() && dst.isContinuous()) 	
+	{
+		// Convert entire buffer at in one call (should be the usual case)
+		
+		cvtYUY2toY_NEON( (void *) src.data, (void *) dst.data, src.rows * src.cols );
+		
+	}
+	else 
+	{
+		// Convert entire buffer one row at a time
+		
+		uchar * psrc= (uchar *) src.data;
+		uchar * pdst= (uchar *) dst.data;
+		
+		for (int r=0; r<src.rows; r++)
+		{
+			cvtYUY2toY_NEON( (void *) psrc, (void *) pdst, src.cols );
+			psrc += src.step[0];
+			pdst += dst.step[0];
+		}
+		
+	}
+				
+#else
+		extractChannel(_src, _dst, 0);
+#endif
+  
+}
+
+///////////////////////////////////// UYVY -> Y  /////////////////////////////////////
+
+void cvtUYVYtoY( InputArray _src, OutputArray _dst );			// Just to avoid 'no previous declaration' warning 
+
+void cvtUYVYtoY( InputArray _src, OutputArray _dst )
+{
+	extractChannel( _src, _dst, 1 );
+}
+
+
+///////////////////////////////////// OCL  /////////////////////////////////////
+
 #ifdef HAVE_OPENCL
 
 static bool ocl_cvtColor( InputArray _src, OutputArray _dst, int code, int dcn )
@@ -5210,7 +5341,19 @@ static bool ocl_cvtColor( InputArray _src, OutputArray _dst, int code, int dcn )
         k.args(ocl::KernelArg::ReadOnlyNoSize(src), ocl::KernelArg::WriteOnly(dst), ocl::KernelArg::PtrReadOnly(c));
         return k.run(2, globalsize, 0, false);
     }
-    case COLOR_BGR2HSV: case COLOR_RGB2HSV: case COLOR_BGR2HSV_FULL: case COLOR_RGB2HSV_FULL:
+    // optimized BGR2HSV and RGB2HSV
+    case COLOR_BGR2HSV: case COLOR_RGB2HSV: 
+    {
+        CV_Assert((scn == 3 || scn == 4) && (depth == CV_8U || depth == CV_32F));
+        volatile bool initialized = false;
+        if (!initialized)
+        {
+            CC_Init();
+            initialized = true;
+        }
+        // JLO TODO
+    }
+    case COLOR_BGR2HSV_FULL: case COLOR_RGB2HSV_FULL:
     case COLOR_BGR2HLS: case COLOR_RGB2HLS: case COLOR_BGR2HLS_FULL: case COLOR_RGB2HLS_FULL:
     {
         CV_Assert((scn == 3 || scn == 4) && (depth == CV_8U || depth == CV_32F));
@@ -6771,7 +6914,8 @@ void cv::cvtColor( InputArray _src, OutputArray _dst, int code, int dcn )
                 CV_Assert( dcn == 1 );
                 CV_Assert( scn == 2 && depth == CV_8U );
 
-                extractChannel(_src, _dst, code == CV_YUV2GRAY_UYVY ? 1 : 0);
+				if (code == CV_YUV2GRAY_YUY2) cvtYUY2toY(_src, _dst); 
+				if (code == CV_YUV2GRAY_UYVY) cvtUYVYtoY(_src, _dst); 
             }
             break;
         case CV_RGBA2mRGBA:

@@ -420,6 +420,13 @@ if(UNIX)
     endif(LIBYUV_FOUND)
   endif(WITH_LIBYUV)
 
+  if(WITH_TRACERCOMMON)
+    find_package(TracerCommon)
+    if(TRACERCOMMON_FOUND)
+      add_definitions(-DWITH_TRACERCOMMON)
+    endif(TRACERCOMMON_FOUND)
+  endif(WITH_TRACERCOMMON)
+
   include(CheckFunctionExists)
   include(CheckIncludeFile)
 
@@ -887,6 +894,14 @@ if(DEFINED WITH_LIBYUV)
     status("    LIBYUV:"       NO)
   endif()
 endif(DEFINED WITH_LIBYUV)
+
+if(DEFINED WITH_TRACERCOMMON)
+  if(UNIX)
+    status("    TRACERCOMMON:"       TRACERCOMMON_FOUND         THEN YES ELSE NO)
+  else()
+    status("    TRACERCOMMON:"       NO)
+  endif()
+endif(DEFINED WITH_TRACERCOMMON)
 
 if(DEFINED WITH_GSTREAMER)
   status("    GStreamer:"      HAVE_GSTREAMER      THEN ""                                         ELSE NO)
