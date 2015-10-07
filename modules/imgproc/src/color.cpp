@@ -4878,6 +4878,7 @@ struct mRGBA2RGBA
 
 void cvtYUY2toY_NEON( void * src, void * dst, int cnt  );		// Just to avoid 'no previous declaration' warning 
 
+__attribute__ ((noinline))  
 void cvtYUY2toY_NEON( void * src, void * dst, int cnt  )
 {
 	uchar tmp=0;
@@ -4921,11 +4922,13 @@ void cvtYUY2toY_NEON( void * src, void * dst, int cnt  )
 
 		// Loop extract remaining Y values one at a time (if any)
 
-		"5:		\n"
+		"5:		                \n"
 		"cmp	%2, #1      	\n"
 		"blt	6f				\n"
-		"ldrh 	%3,[%0]!  		\n"
-		"strb 	%3,[%1]!   		\n"
+		"ldrh 	%3,[%0]  		\n"
+		"strb 	%3,[%1]   		\n"
+		"add 	%0,%0,#0x2		\n"
+		"add 	%1,%1,#0x1		\n"
 		"sub 	%2, %2, #1		\n"
 		"b		5b				\n"
 		"6:						\n"
@@ -5345,6 +5348,7 @@ static bool ocl_cvtColor( InputArray _src, OutputArray _dst, int code, int dcn )
     case COLOR_BGR2HSV: case COLOR_RGB2HSV: 
     {
         CV_Assert((scn == 3 || scn == 4) && (depth == CV_8U || depth == CV_32F));
+#ifdef WITH_TRACERCOMMON
         volatile bool initialized = false;
         if (!initialized)
         {
@@ -5352,6 +5356,7 @@ static bool ocl_cvtColor( InputArray _src, OutputArray _dst, int code, int dcn )
             initialized = true;
         }
         // JLO TODO
+#endif
     }
     case COLOR_BGR2HSV_FULL: case COLOR_RGB2HSV_FULL:
     case COLOR_BGR2HLS: case COLOR_RGB2HLS: case COLOR_BGR2HLS_FULL: case COLOR_RGB2HLS_FULL:
