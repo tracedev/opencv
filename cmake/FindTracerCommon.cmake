@@ -1,7 +1,7 @@
 # - Try to find TracerCommon
 # Once done this will define
 #  TRACERCOMMON_FOUND - System has TracerCommon
-#  TRACERCOMMON_INCLUDE_DIRS - The TraccerCommon include directories
+#  TRACERCOMMON_INCLUDE_DIRS - The TracerCommon include directories
 #  TRACERCOMMON_LIBRARIES - The libraries needed to use TracerCommon
 #  TRACERCOMMON_LINK_DIR - Path to the TracerCommon library
 

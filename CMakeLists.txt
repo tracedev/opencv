@@ -427,6 +427,13 @@ if(UNIX)
     endif(TRACERCOMMON_FOUND)
   endif(WITH_TRACERCOMMON)
 
+  if(WITH_FFTW)
+    find_package(Fftw)
+    if(FFTW_FOUND)
+      add_definitions(-DHAVE_FFTW)
+    endif(FFTW_FOUND)
+  endif(WITH_FFTW)
+
   include(CheckFunctionExists)
   include(CheckIncludeFile)
 
@@ -902,6 +909,14 @@ if(DEFINED WITH_TRACERCOMMON)
     status("    TRACERCOMMON:"       NO)
   endif()
 endif(DEFINED WITH_TRACERCOMMON)
+
+if(DEFINED WITH_FFTW)
+  if(UNIX)
+    status("    FFTW:"       FFTW_FOUND         THEN YES ELSE NO)
+  else()
+    status("    FFTW:"       NO)
+  endif()
+endif(DEFINED WITH_FFTW)
 
 if(DEFINED WITH_GSTREAMER)
   status("    GStreamer:"      HAVE_GSTREAMER      THEN ""                                         ELSE NO)

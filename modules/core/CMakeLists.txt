@@ -1,15 +1,12 @@
 set(the_description "The Core Functionality")
 
+if(FFTW_FOUND)
+       ocv_include_directories(${FFTW_INCLUDE_DIRS})
+       link_directories(${FFTW_LINK_DIR})
+       list(APPEND CORE_LIBRARIES fftw3f)
+endif(TRACERCOMMON_FOUND)
 
-set(HAVE_FFTW OFF)
-
-if(HAVE_FFTW)
-    set(FFTW_LIB "${OpenCV_SOURCE_DIR}/3rdparty/fftw/libfftw3f.a" )
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAVE_FFTW")
-endif()
-
-
-ocv_add_module(core PRIVATE_REQUIRED ${ZLIB_LIBRARIES} "${OPENCL_LIBRARIES}" "${FFTW_LIB}" OPTIONAL opencv_cudev)
+ocv_add_module(core PRIVATE_REQUIRED ${CORE_LIBRARIES} ${ZLIB_LIBRARIES} "${OPENCL_LIBRARIES}" OPTIONAL opencv_cudev)
 
 if(HAVE_WINRT_CX)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /ZW")
