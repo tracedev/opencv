@@ -12,7 +12,7 @@
 #include "opencv2/imgproc.hpp"
 
 #define PATH_PHYSICAL_ADDRESS "/dev/shm/camera_buffer_pa"
-#define PATH_DEV_MEM "/dev/mem"
+#define PATH_DEV_MEM "/dev/cachedmem"
 
 // define COPY_ON_GRAB to immediately create a copy of the YUV frame before the
 // later color space conversion in retrieve(). If the buffer isn't stable 
